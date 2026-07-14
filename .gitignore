@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.dist
 
 # Runtime and backups
 logs/

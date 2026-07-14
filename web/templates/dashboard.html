@@ -8,7 +8,7 @@
     content="width=device-width, initial-scale=1"
   >
 
-  <title>{% if project_title %}{{ project_title }} · {% endif %}Door to Pocket</title>
+  <title>{% if project_title %}Duck - {{ project_title }}{% else %}Duck{% endif %}</title>
 
   <link
     rel="stylesheet"
@@ -23,7 +23,15 @@
   {% endif %}
 </head>
 
-<body class="{% if project %}project-view{% else %}projects-view{% endif %}">
+<body
+  class="{% if project %}project-view{% else %}projects-view{% endif %}"
+  data-project="{{ project or '' }}"
+  data-leave-reminder-enabled="{{ 1 if reminders.leave_enabled else 0 }}"
+  data-leave-reminder-message="{{ reminders.leave_message }}"
+  data-periodic-reminder-enabled="{{ 1 if reminders.periodic_enabled else 0 }}"
+  data-periodic-reminder-minutes="{{ reminders.periodic_minutes }}"
+  data-periodic-reminder-message="{{ reminders.periodic_message }}"
+>
   <header class="topbar">
     {% if project %}
       <a
@@ -42,7 +50,7 @@
     >←</button>
 
     <a class="brand" href="/">
-      Door to Pocket
+      Duck
     </a>
   </header>
 
@@ -401,10 +409,592 @@
     </section>
   </main>
 
+  <div
+    id="duck-reminder-dialog"
+    class="duck-reminder-dialog"
+    hidden
+  >
+    <div
+      class="duck-reminder-card"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="duck-reminder-message"
+    >
+      <p id="duck-reminder-message"></p>
+
+      <input
+        id="duck-reminder-update"
+        class="duck-reminder-update"
+        type="text"
+        maxlength="500"
+        autocomplete="off"
+        placeholder="Optional one-line status update"
+        hidden
+      >
+
+      <p
+        id="duck-reminder-error"
+        class="duck-reminder-error"
+        aria-live="polite"
+        hidden
+      ></p>
+
+      <div class="duck-reminder-actions">
+        <button
+          id="duck-reminder-save-leave"
+          class="duck-reminder-save-leave"
+          type="button"
+          hidden
+        >Update and leave</button>
+
+        <button
+          id="duck-reminder-stay"
+          class="duck-reminder-stay"
+          type="button"
+          hidden
+        >Stay</button>
+
+        <button
+          id="duck-reminder-ok"
+          class="duck-reminder-ok"
+          type="button"
+          hidden
+        >OK</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     (() => {
       const body =
         document.body;
+
+      const currentProject =
+        body.dataset.project || '';
+
+      const leaveReminderEnabled =
+        body.dataset.leaveReminderEnabled === '1';
+
+      const leaveReminderMessage =
+        body.dataset.leaveReminderMessage
+        || 'Did you check?';
+
+      const periodicReminderEnabled =
+        body.dataset.periodicReminderEnabled === '1';
+
+      const periodicReminderMinutes =
+        Number(
+          body.dataset.periodicReminderMinutes
+        );
+
+      const periodicReminderMessage =
+        body.dataset.periodicReminderMessage
+        || 'Time to update the status.';
+
+      const reminderDialog =
+        document.getElementById(
+          'duck-reminder-dialog'
+        );
+
+      const reminderMessage =
+        document.getElementById(
+          'duck-reminder-message'
+        );
+
+      const reminderUpdate =
+        document.getElementById(
+          'duck-reminder-update'
+        );
+
+      const reminderError =
+        document.getElementById(
+          'duck-reminder-error'
+        );
+
+      const reminderSaveLeave =
+        document.getElementById(
+          'duck-reminder-save-leave'
+        );
+
+      const reminderStay =
+        document.getElementById(
+          'duck-reminder-stay'
+        );
+
+      const reminderOk =
+        document.getElementById(
+          'duck-reminder-ok'
+        );
+
+      let pendingDestination = null;
+      let allowProjectLeave = false;
+      let allowProjectLeaveUntil = 0;
+      let exitIntentArmed = true;
+      let periodicReminderWaiting = false;
+
+      const clearReminderError = () => {
+        reminderError.textContent = '';
+        reminderError.hidden = true;
+      };
+
+      const setLeaveBusy = (
+        busy
+      ) => {
+        reminderUpdate.disabled = busy;
+        reminderSaveLeave.disabled = busy;
+        reminderStay.disabled = busy;
+
+        reminderSaveLeave.textContent =
+          busy
+            ? 'Saving…'
+            : 'Update and leave';
+      };
+
+      const closeReminder = () => {
+        reminderDialog.hidden = true;
+
+        reminderUpdate.hidden = true;
+        reminderSaveLeave.hidden = true;
+        reminderStay.hidden = true;
+        reminderOk.hidden = true;
+
+        clearReminderError();
+        setLeaveBusy(false);
+      };
+
+      const showPeriodicReminder = () => {
+        if (!reminderDialog.hidden) {
+          periodicReminderWaiting = true;
+          return;
+        }
+
+        periodicReminderWaiting = false;
+
+        reminderMessage.textContent =
+          periodicReminderMessage;
+
+        reminderUpdate.hidden = true;
+        reminderSaveLeave.hidden = true;
+        reminderStay.hidden = true;
+        reminderOk.hidden = false;
+
+        clearReminderError();
+
+        reminderDialog.hidden = false;
+        reminderOk.focus();
+      };
+
+      const showWaitingPeriodicReminder = () => {
+        if (periodicReminderWaiting) {
+          showPeriodicReminder();
+        }
+      };
+
+      const showLeaveReminder = (
+        destination
+      ) => {
+        const isExitIntent =
+          destination === null;
+
+        pendingDestination = destination;
+
+        reminderMessage.textContent =
+          leaveReminderMessage;
+
+        reminderUpdate.value = '';
+        reminderUpdate.hidden = false;
+
+        reminderSaveLeave.textContent =
+          isExitIntent
+            ? 'Update status'
+            : 'Update and leave';
+
+        reminderStay.textContent =
+          isExitIntent
+            ? 'Dismiss'
+            : 'Stay';
+
+        reminderSaveLeave.hidden = false;
+        reminderStay.hidden = false;
+        reminderOk.hidden = true;
+
+        clearReminderError();
+        setLeaveBusy(false);
+
+        reminderDialog.hidden = false;
+        reminderUpdate.focus();
+      };
+
+      const saveStatusAndLeave =
+        async () => {
+          const line =
+            reminderUpdate.value.trim();
+
+          clearReminderError();
+
+          if (!line) {
+            if (pendingDestination) {
+              allowProjectLeave = true;
+
+              window.location.assign(
+                pendingDestination
+              );
+
+              return;
+            }
+
+            allowProjectLeaveUntil =
+              Date.now() + 15000;
+
+            closeReminder();
+
+            return;
+          }
+
+          setLeaveBusy(true);
+
+          try {
+            const response =
+              await fetch(
+                `/api/projects/${
+                  encodeURIComponent(
+                    currentProject
+                  )
+                }/status-update`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type':
+                      'application/json',
+                  },
+                  body: JSON.stringify(
+                    {
+                      update: line,
+                    }
+                  ),
+                }
+              );
+
+            if (!response.ok) {
+              throw new Error(
+                'Status update failed'
+              );
+            }
+
+            if (pendingDestination) {
+              allowProjectLeave = true;
+
+              window.location.assign(
+                pendingDestination
+              );
+
+              return;
+            }
+
+            allowProjectLeaveUntil =
+              Date.now() + 15000;
+
+            closeReminder();
+          } catch (_error) {
+            reminderError.textContent =
+              'Could not save the update.';
+
+            reminderError.hidden = false;
+            setLeaveBusy(false);
+          }
+        };
+
+      reminderSaveLeave.addEventListener(
+        'click',
+        saveStatusAndLeave
+      );
+
+      reminderUpdate.addEventListener(
+        'keydown',
+        (event) => {
+          if (event.key !== 'Enter') {
+            return;
+          }
+
+          event.preventDefault();
+          saveStatusAndLeave();
+        }
+      );
+
+      reminderStay.addEventListener(
+        'click',
+        () => {
+          pendingDestination = null;
+
+          closeReminder();
+          showWaitingPeriodicReminder();
+        }
+      );
+
+      reminderOk.addEventListener(
+        'click',
+        () => {
+          closeReminder();
+          showWaitingPeriodicReminder();
+        }
+      );
+
+      document.addEventListener(
+        'keydown',
+        (event) => {
+          if (
+            event.key !== 'Escape'
+            || reminderDialog.hidden
+            || reminderSaveLeave.disabled
+          ) {
+            return;
+          }
+
+          event.preventDefault();
+
+          pendingDestination = null;
+
+          closeReminder();
+          showWaitingPeriodicReminder();
+        }
+      );
+
+      const destinationStaysInProject = (
+        destination
+      ) => {
+        if (
+          !currentProject
+          || destination.origin
+            !== window.location.origin
+        ) {
+          return false;
+        }
+
+        const projectPath =
+          `/project/${
+            encodeURIComponent(
+              currentProject
+            )
+          }`;
+
+        return (
+          destination.pathname === projectPath
+          || destination.pathname.startsWith(
+            `${projectPath}/`
+          )
+        );
+      };
+
+      document.addEventListener(
+        'click',
+        (event) => {
+          if (
+            !leaveReminderEnabled
+            || !currentProject
+            || event.defaultPrevented
+            || event.button !== 0
+            || event.metaKey
+            || event.ctrlKey
+            || event.shiftKey
+            || event.altKey
+          ) {
+            return;
+          }
+
+          const anchor =
+            event.target instanceof Element
+              ? event.target.closest('a')
+              : null;
+
+          if (
+            !anchor
+            || anchor.target === '_blank'
+            || anchor.hasAttribute('download')
+          ) {
+            return;
+          }
+
+          const href =
+            anchor.getAttribute('href');
+
+          if (
+            !href
+            || href.startsWith('#')
+          ) {
+            return;
+          }
+
+          let destination;
+
+          try {
+            destination = new URL(
+              href,
+              window.location.href
+            );
+          } catch (_error) {
+            return;
+          }
+
+          if (
+            destination.protocol !== 'http:'
+            && destination.protocol !== 'https:'
+          ) {
+            return;
+          }
+
+          if (
+            destinationStaysInProject(
+              destination
+            )
+          ) {
+            return;
+          }
+
+          event.preventDefault();
+
+          showLeaveReminder(
+            destination.href
+          );
+        }
+      );
+
+      document.addEventListener(
+        'mouseover',
+        (event) => {
+          if (
+            event.relatedTarget === null
+            && Date.now()
+              >= allowProjectLeaveUntil
+          ) {
+            exitIntentArmed = true;
+          }
+        }
+      );
+
+      document.addEventListener(
+        'mouseout',
+        (event) => {
+          if (
+            !leaveReminderEnabled
+            || !currentProject
+            || !exitIntentArmed
+            || !reminderDialog.hidden
+            || event.relatedTarget !== null
+            || event.clientY > 8
+          ) {
+            return;
+          }
+
+          exitIntentArmed = false;
+
+          showLeaveReminder(
+            null
+          );
+        }
+      );
+
+      const schedulePeriodicReminder = () => {
+        if (
+          !periodicReminderEnabled
+          || !Number.isFinite(
+            periodicReminderMinutes
+          )
+          || periodicReminderMinutes < 1
+        ) {
+          return;
+        }
+
+        const interval =
+          periodicReminderMinutes
+          * 60
+          * 1000;
+
+        const storageKey =
+          'duck.periodic-reminder';
+
+        const signature =
+          JSON.stringify(
+            [
+              periodicReminderMinutes,
+              periodicReminderMessage,
+            ]
+          );
+
+        let state = null;
+
+        try {
+          state = JSON.parse(
+            sessionStorage.getItem(
+              storageKey
+            )
+          );
+        } catch (_error) {
+          state = null;
+        }
+
+        let nextAt =
+          state
+          && state.signature === signature
+          && Number.isFinite(
+            Number(state.nextAt)
+          )
+            ? Number(state.nextAt)
+            : Date.now() + interval;
+
+        const saveState = () => {
+          try {
+            sessionStorage.setItem(
+              storageKey,
+              JSON.stringify(
+                {
+                  signature,
+                  nextAt,
+                }
+              )
+            );
+          } catch (_error) {
+            // Continue without persisted timer state.
+          }
+        };
+
+        const armTimer = () => {
+          const remaining =
+            nextAt - Date.now();
+
+          const maximumDelay =
+            2147483647;
+
+          if (remaining > maximumDelay) {
+            window.setTimeout(
+              armTimer,
+              maximumDelay
+            );
+
+            return;
+          }
+
+          window.setTimeout(
+            () => {
+              showPeriodicReminder();
+
+              nextAt =
+                Date.now() + interval;
+
+              saveState();
+              armTimer();
+            },
+            Math.max(
+              0,
+              remaining
+            )
+          );
+        };
+
+        saveState();
+        armTimer();
+      };
+
+      schedulePeriodicReminder();
 
       const panel =
         document.getElementById(

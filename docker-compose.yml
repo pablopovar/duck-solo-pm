@@ -1,21 +1,28 @@
-name: door-to-pocket
+name: duck
 
 services:
   web:
     build: .
-    restart: unless-stopped
+#    restart: unless-stopped
+    user: "${DUCK_UID:-1000}:${DUCK_GID:-1000}"
 
     ports:
-      - "3200:3200"
+      - "${POCKET_PORT:-3200}:3200"
 
     environment:
-
       PROJECTS_ROOT: /data/projects
-      PROJECTS_HOST_PATH: "${POCKET_PROJECTS_PATH:-../../ai-observer/projects}"
+      PROJECTS_HOST_PATH: "${POCKET_PROJECTS_HOST_PATH}"
       POCKET_HOST_APP_ROOT: "${PWD}"
+
+      DUCK_LEAVE_REMINDER_ENABLED: "${DUCK_LEAVE_REMINDER_ENABLED:-true}"
+      DUCK_LEAVE_REMINDER_MESSAGE: "${DUCK_LEAVE_REMINDER_MESSAGE:-Did you check?}"
+
+      DUCK_PERIODIC_REMINDER_ENABLED: "${DUCK_PERIODIC_REMINDER_ENABLED:-true}"
+      DUCK_PERIODIC_REMINDER_MINUTES: "${DUCK_PERIODIC_REMINDER_MINUTES:-60}"
+      DUCK_PERIODIC_REMINDER_MESSAGE: "${DUCK_PERIODIC_REMINDER_MESSAGE:-Time to update the status.}"
 
     volumes:
       - type: bind
-        source: ${POCKET_PROJECTS_PATH:-../../ai-observer/projects}
+        source: "${POCKET_PROJECTS_PATH}"
         target: /data/projects
         read_only: false

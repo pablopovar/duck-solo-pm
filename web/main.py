@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import os
 import re
+from datetime import datetime
 from html import escape
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -31,7 +34,7 @@ from app.engine.projects import (
 
 WEB_DIR = Path(__file__).resolve().parent
 
-app = FastAPI(title="Door to Pocket")
+app = FastAPI(title="Duck")
 
 app.mount(
     "/static",
@@ -77,6 +80,10 @@ class MarkdownUpdate(BaseModel):
     frontmatter: str = ""
     body: str = ""
     has_frontmatter: bool = False
+
+
+class StatusUpdate(BaseModel):
+    update: str = ""
 
 
 def render_dashboard(source: str) -> str:
@@ -186,6 +193,58 @@ def project_title(project: str) -> str:
     )
 
 
+def _env_enabled(
+    name: str,
+    default: bool,
+) -> bool:
+    fallback = "true" if default else "false"
+
+    return os.environ.get(
+        name,
+        fallback,
+    ).strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def reminder_settings() -> dict[str, object]:
+    try:
+        periodic_minutes = int(
+            os.environ.get(
+                "DUCK_PERIODIC_REMINDER_MINUTES",
+                "60",
+            )
+        )
+    except ValueError:
+        periodic_minutes = 60
+
+    return {
+        "leave_enabled": _env_enabled(
+            "DUCK_LEAVE_REMINDER_ENABLED",
+            True,
+        ),
+        "leave_message": os.environ.get(
+            "DUCK_LEAVE_REMINDER_MESSAGE",
+            "Did you check?",
+        ).strip(),
+        "periodic_enabled": _env_enabled(
+            "DUCK_PERIODIC_REMINDER_ENABLED",
+            True,
+        ),
+        "periodic_minutes": max(
+            1,
+            periodic_minutes,
+        ),
+        "periodic_message": os.environ.get(
+            "DUCK_PERIODIC_REMINDER_MESSAGE",
+            "Time to update the status.",
+        ).strip(),
+    }
+
+
 def context(
     request: Request,
     *,
@@ -216,6 +275,7 @@ def context(
         "editor_files": editor_files or [],
         "github_url": github_url,
         "local_repo": local_repo,
+        "reminders": reminder_settings(),
         "error": error,
         "quote": quote,
     }
@@ -432,6 +492,86 @@ def put_markdown_file(
     return {
         "saved": True,
         "file": file,
+    }
+
+
+@app.post(
+    "/api/projects/{project}/status-update",
+)
+def append_status_update(
+    project: str,
+    update: StatusUpdate,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+
+    line = " ".join(
+        part.strip()
+        for part in update.update.splitlines()
+        if part.strip()
+    ).strip()
+
+    if not line:
+        return {
+            "saved": False,
+            "update": "",
+        }
+
+    try:
+        current = read_editable_markdown(
+            project,
+            "status.md",
+        )
+
+        body = str(
+            current["body"]
+        )
+
+        body = body.rstrip()
+
+        if body:
+            body += "\n\n"
+
+        try:
+            timezone = ZoneInfo(
+                os.environ.get(
+                    "POCKET_TIMEZONE",
+                    "America/New_York",
+                )
+            )
+        except Exception:
+            timezone = ZoneInfo("UTC")
+
+        timestamp = datetime.now(
+            timezone
+        ).strftime(
+            "%m/%d/%Y %I:%M %p"
+        )
+
+        body += (
+            f"- **{timestamp}** — "
+            f"{line}\n"
+        )
+
+        write_editable_markdown(
+            project,
+            "status.md",
+            frontmatter=str(
+                current["frontmatter"]
+            ),
+            body=body,
+            has_frontmatter=bool(
+                current["has_frontmatter"]
+            ),
+        )
+    except ProjectError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "saved": True,
+        "update": line,
     }
 
 

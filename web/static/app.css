@@ -570,3 +570,259 @@ a {
     margin-left: 0;
   }
 }
+
+
+/* Duck reminders */
+
+.duck-reminder-dialog[hidden],
+.duck-reminder-actions button[hidden] {
+  display: none;
+}
+
+.duck-reminder-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 38%);
+}
+
+.duck-reminder-card {
+  width: min(420px, 100%);
+  padding: 24px;
+  border: 1px solid #d7d3cc;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 18px 55px rgb(0 0 0 / 24%);
+}
+
+.duck-reminder-card p {
+  margin: 0;
+  color: #26231f;
+  font-size: 19px;
+  line-height: 1.45;
+}
+
+.duck-reminder-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.duck-reminder-actions button {
+  min-width: 76px;
+  min-height: 36px;
+  padding: 7px 14px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #fff;
+  color: #222;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.duck-reminder-actions button:hover {
+  background: #f2f0eb;
+}
+
+.duck-reminder-actions button:focus-visible {
+  outline: 2px solid #222;
+  outline-offset: 2px;
+}
+
+
+/* Duck palette and status-update reminder */
+
+:root {
+  --duck-orange: #ed7014;
+  --duck-silver: #c0c0c0;
+  --duck-gunmetal: #4f6675;
+  --duck-dark: #28363f;
+  --duck-light: #f2f2f2;
+}
+
+html,
+body {
+  background: var(--duck-gunmetal);
+  color: var(--duck-gunmetal);
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+.topbar,
+.projects-panel {
+  background: var(--duck-gunmetal);
+  color: var(--duck-silver);
+}
+
+.topbar {
+  border-bottom-color:
+    rgb(192 192 192 / 35%);
+}
+
+.projects-panel {
+  border-right-color:
+    rgb(192 192 192 / 35%);
+}
+
+.brand,
+.project-back,
+.sidebar-toggle,
+.projects-heading h1,
+.projects-panel .empty {
+  color: var(--duck-silver);
+}
+
+.project-link {
+  color: var(--duck-silver);
+}
+
+.project-link:hover,
+.project-link.active {
+  background:
+    rgb(237 112 20 / 20%);
+  color: var(--duck-light);
+}
+
+.project-score {
+  background: var(--duck-orange);
+  color: var(--duck-light);
+}
+
+.project-sort {
+  border-color: var(--duck-silver);
+  background: var(--duck-silver);
+  color: var(--duck-gunmetal);
+}
+
+.dashboard-panel {
+  background: var(--duck-silver);
+  color: var(--duck-gunmetal);
+}
+
+.markdown-body,
+.configuration-form,
+.configuration-prompt,
+.placeholder,
+.markdown-editor-app {
+  color: var(--duck-gunmetal);
+}
+
+.markdown-body a {
+  color: var(--duck-dark);
+  text-decoration-color: var(--duck-orange);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.project-desktop-action,
+#editor-save,
+.configuration-form button {
+  border-color: var(--duck-orange);
+  background: var(--duck-orange);
+  color: var(--duck-light);
+}
+
+.project-desktop-action:hover,
+#editor-save:hover,
+.configuration-form button:hover {
+  border-color: #cf5d0c;
+  background: #cf5d0c;
+}
+
+.secondary-action {
+  border-color: var(--duck-gunmetal);
+  background: transparent;
+  color: var(--duck-gunmetal);
+}
+
+.duck-reminder-dialog {
+  background:
+    rgb(40 54 63 / 72%);
+}
+
+.duck-reminder-card {
+  border: 2px solid var(--duck-orange);
+  background: var(--duck-silver);
+  color: var(--duck-gunmetal);
+}
+
+.duck-reminder-card p {
+  color: var(--duck-gunmetal);
+}
+
+.duck-reminder-update {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 18px;
+  padding: 11px 13px;
+  border: 2px solid var(--duck-gunmetal);
+  border-radius: 6px;
+  background: var(--duck-light);
+  color: var(--duck-gunmetal);
+  font: inherit;
+  font-size: 16px;
+}
+
+.duck-reminder-update::placeholder {
+  color:
+    rgb(79 102 117 / 70%);
+}
+
+.duck-reminder-update:focus {
+  border-color: var(--duck-orange);
+  outline: 2px solid var(--duck-orange);
+  outline-offset: 2px;
+}
+
+.duck-reminder-error {
+  margin-top: 9px;
+  color: #7c2700;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.duck-reminder-actions button {
+  border-color: var(--duck-gunmetal);
+  background: var(--duck-gunmetal);
+  color: var(--duck-light);
+}
+
+.duck-reminder-actions
+.duck-reminder-save-leave,
+.duck-reminder-actions
+.duck-reminder-ok {
+  border-color: var(--duck-orange);
+  background: var(--duck-orange);
+  color: var(--duck-light);
+}
+
+.duck-reminder-actions button:hover {
+  border-color: var(--duck-dark);
+  background: var(--duck-dark);
+  color: var(--duck-light);
+}
+
+.duck-reminder-actions
+.duck-reminder-save-leave:hover,
+.duck-reminder-actions
+.duck-reminder-ok:hover {
+  border-color: #cf5d0c;
+  background: #cf5d0c;
+}
+
+.duck-reminder-actions button:disabled,
+.duck-reminder-update:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
