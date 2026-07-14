@@ -20,6 +20,7 @@ Projects remain ordinary folders on disk. Duck adds a lightweight management lay
 A configured project has this basic structure:
 
 
+```
 example-project/
 ├── .pocket/
 │   ├── config.md
@@ -30,3 +31,4 @@ example-project/
 │   └── stream.md
 ├── canvas.md
 └── inbox.md
+```
