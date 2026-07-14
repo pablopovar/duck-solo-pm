@@ -52,6 +52,18 @@
     <a class="brand" href="/">
       Duck
     </a>
+
+    <nav class="duck-topbar-settings">
+      {% if project %}
+        <a
+          href="/project/{{ quote(project, safe='') }}/settings"
+        >Project Settings</a>
+      {% endif %}
+
+      <a href="/settings">
+        Settings
+      </a>
+    </nav>
   </header>
 
   <main class="workspace">
@@ -119,6 +131,164 @@
 
     <section class="dashboard-panel{% if state == 'editor' %} editor-panel{% endif %}">
       {% if state == "dashboard" %}
+        <!-- DUCK SETTINGS SUBSYSTEM -->
+        <section
+          id="duck-session-state"
+          class="duck-session-state"
+          data-project="{{ project }}"
+          data-project-title="{{ project_title }}"
+          data-status="{{ project_qualifiers.get('status', '') }}"
+          data-category="{{ project_qualifiers.get('category', '') }}"
+          data-priority="{{ project_qualifiers.get('priority', '') }}"
+          data-class="{{ project_qualifiers.get('class', '') }}"
+          data-type="{{ project_qualifiers.get('type', '') }}"
+        >
+          <header class="duck-session-state-header">
+            <div>
+              <h2>Project State</h2>
+
+              <div class="duck-project-qualifiers">
+                {% for key in [
+                  "status",
+                  "category",
+                  "priority",
+                  "class",
+                  "type"
+                ] %}
+                  {% set value = project_qualifiers.get(key, "") %}
+
+                  {% if value %}
+                    <span>
+                      <strong>
+                        {{ key | capitalize }}:
+                      </strong>
+
+                      {{ value }}
+                    </span>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            </div>
+
+            <a
+              class="duck-project-settings-link"
+              href="/project/{{ quote(project, safe='') }}/settings"
+            >
+              Project Settings
+            </a>
+          </header>
+
+          <div class="duck-session-fields">
+            <section class="duck-session-field">
+              <header>
+                <label for="duck-current-state">
+                  Current state
+                </label>
+
+                <button
+                  type="button"
+                  class="duck-copy-prompt"
+                  data-copy-prompt="current_state"
+                >
+                  Copy Prompt
+                </button>
+              </header>
+
+              <textarea
+                id="duck-current-state"
+                data-session-field="current_state"
+                rows="4"
+              >{{ session_values.get("current_state", "") }}</textarea>
+            </section>
+
+            <section class="duck-session-field">
+              <header>
+                <label for="duck-next-action">
+                  Next action
+                </label>
+
+                <button
+                  type="button"
+                  class="duck-copy-prompt"
+                  data-copy-prompt="next_action"
+                >
+                  Copy Prompt
+                </button>
+              </header>
+
+              <textarea
+                id="duck-next-action"
+                data-session-field="next_action"
+                rows="4"
+              >{{ session_values.get("next_action", "") }}</textarea>
+            </section>
+
+            <section class="duck-session-field">
+              <header>
+                <label for="duck-unresolved-decisions">
+                  Unresolved decisions
+                </label>
+
+                <button
+                  type="button"
+                  class="duck-copy-prompt"
+                  data-copy-prompt="unresolved_decisions"
+                >
+                  Copy Prompt
+                </button>
+              </header>
+
+              <textarea
+                id="duck-unresolved-decisions"
+                data-session-field="unresolved_decisions"
+                rows="5"
+              >{{ session_values.get("unresolved_decisions", "") }}</textarea>
+            </section>
+
+            <section class="duck-session-field">
+              <header>
+                <label for="duck-milestone-definition">
+                  Milestone definition
+                </label>
+
+                <button
+                  type="button"
+                  class="duck-copy-prompt"
+                  data-copy-prompt="milestone_definition"
+                >
+                  Copy Prompt
+                </button>
+              </header>
+
+              <textarea
+                id="duck-milestone-definition"
+                data-session-field="milestone_definition"
+                rows="5"
+              >{{ session_values.get("milestone_definition", "") }}</textarea>
+            </section>
+          </div>
+
+          <footer class="duck-session-state-footer">
+            <button
+              id="duck-save-session-state"
+              type="button"
+              class="duck-primary-button"
+            >
+              Save Project State
+            </button>
+
+            <span
+              id="duck-session-feedback"
+              class="duck-session-feedback"
+              aria-live="polite"
+            ></span>
+          </footer>
+
+          <script
+            id="duck-prompt-templates"
+            type="application/json"
+          >{{ prompt_templates | tojson }}</script>
+        </section>
         <div class="project-heading">
           <h1>{{ project_title }}</h1>
 
@@ -159,6 +329,93 @@
             >Edit Markdown</a>
           </div>
         </div>
+
+        <section
+          id="duck-quick-entry"
+          class="duck-quick-entry"
+        >
+          <div class="duck-quick-entry-actions">
+            <button
+              type="button"
+              class="duck-quick-entry-toggle"
+              data-quick-entry-toggle="status"
+            >Add Status</button>
+
+            <button
+              type="button"
+              class="duck-quick-entry-toggle"
+              data-quick-entry-toggle="todo"
+            >Add Todo</button>
+          </div>
+
+          <div
+            id="duck-status-entry"
+            class="duck-quick-entry-panel"
+            data-quick-entry-panel="status"
+            hidden
+          >
+            <label for="duck-status-text">
+              Status update
+            </label>
+
+            <textarea
+              id="duck-status-text"
+              rows="6"
+              placeholder="Add a status update"
+            ></textarea>
+
+            <div class="duck-quick-entry-panel-actions">
+              <button
+                type="button"
+                class="duck-quick-entry-save"
+                data-quick-entry-save="status"
+              >Add Status</button>
+
+              <button
+                type="button"
+                class="duck-quick-entry-cancel"
+                data-quick-entry-cancel="status"
+              >Cancel</button>
+            </div>
+          </div>
+
+          <div
+            id="duck-todo-entry"
+            class="duck-quick-entry-panel"
+            data-quick-entry-panel="todo"
+            hidden
+          >
+            <label for="duck-todo-text">
+              Todo
+            </label>
+
+            <textarea
+              id="duck-todo-text"
+              rows="6"
+              placeholder="Add a todo"
+            ></textarea>
+
+            <div class="duck-quick-entry-panel-actions">
+              <button
+                type="button"
+                class="duck-quick-entry-save"
+                data-quick-entry-save="todo"
+              >Add Todo</button>
+
+              <button
+                type="button"
+                class="duck-quick-entry-cancel"
+                data-quick-entry-cancel="todo"
+              >Cancel</button>
+            </div>
+          </div>
+
+          <p
+            id="duck-quick-entry-feedback"
+            class="duck-quick-entry-feedback"
+            aria-live="polite"
+          ></p>
+        </section>
 
         <article class="markdown-body">
           {{ dashboard_html | safe }}
@@ -996,6 +1253,367 @@
 
       schedulePeriodicReminder();
 
+      const initializeCentralDetails = () => {
+        const markdownBody =
+          document.querySelector(
+            '.markdown-body'
+          );
+
+        if (!markdownBody) {
+          return;
+        }
+
+        const headings =
+          Array.from(
+            markdownBody.querySelectorAll(
+              'h1, h2, h3, h4, h5, h6'
+            )
+          );
+
+        const centralHeading =
+          headings.find(
+            (heading) => (
+              heading.textContent
+                .trim()
+                .toLowerCase()
+                === 'central'
+            )
+          );
+
+        if (!centralHeading) {
+          return;
+        }
+
+        const level =
+          Number(
+            centralHeading.tagName.slice(1)
+          );
+
+        const details =
+          document.createElement(
+            'details'
+          );
+
+        details.className =
+          'duck-central-details';
+
+        const summary =
+          document.createElement(
+            'summary'
+          );
+
+        summary.textContent =
+          centralHeading.textContent.trim();
+
+        const content =
+          document.createElement(
+            'div'
+          );
+
+        content.className =
+          'duck-central-content';
+
+        details.appendChild(
+          summary
+        );
+
+        details.appendChild(
+          content
+        );
+
+        centralHeading.before(
+          details
+        );
+
+        let sibling =
+          centralHeading.nextSibling;
+
+        centralHeading.remove();
+
+        while (sibling) {
+          const next =
+            sibling.nextSibling;
+
+          const siblingLevel =
+            sibling.nodeType === 1
+            && /^H[1-6]$/.test(
+              sibling.tagName
+            )
+              ? Number(
+                  sibling.tagName.slice(1)
+                )
+              : null;
+
+          if (
+            siblingLevel !== null
+            && siblingLevel <= level
+          ) {
+            break;
+          }
+
+          content.appendChild(
+            sibling
+          );
+
+          sibling = next;
+        }
+      };
+
+      initializeCentralDetails();
+
+      const quickEntryRoot =
+        document.getElementById(
+          'duck-quick-entry'
+        );
+
+      const quickEntryFeedback =
+        document.getElementById(
+          'duck-quick-entry-feedback'
+        );
+
+      const quickEntryPanels =
+        quickEntryRoot
+          ? Array.from(
+              quickEntryRoot.querySelectorAll(
+                '[data-quick-entry-panel]'
+              )
+            )
+          : [];
+
+      const closeQuickEntries = () => {
+        for (
+          const entryPanel
+          of quickEntryPanels
+        ) {
+          entryPanel.hidden = true;
+        }
+      };
+
+      const openQuickEntry = (
+        kind
+      ) => {
+        if (!quickEntryRoot) {
+          return;
+        }
+
+        closeQuickEntries();
+
+        const entryPanel =
+          quickEntryRoot.querySelector(
+            `[data-quick-entry-panel="${kind}"]`
+          );
+
+        if (!entryPanel) {
+          return;
+        }
+
+        entryPanel.hidden = false;
+
+        const textarea =
+          entryPanel.querySelector(
+            'textarea'
+          );
+
+        if (textarea) {
+          textarea.focus();
+        }
+      };
+
+      const saveQuickEntry =
+        async (
+          kind
+        ) => {
+          if (
+            !quickEntryRoot
+            || !currentProject
+          ) {
+            return;
+          }
+
+          const entryPanel =
+            quickEntryRoot.querySelector(
+              `[data-quick-entry-panel="${kind}"]`
+            );
+
+          const textarea =
+            entryPanel
+              ? entryPanel.querySelector(
+                  'textarea'
+                )
+              : null;
+
+          const saveButton =
+            entryPanel
+              ? entryPanel.querySelector(
+                  '[data-quick-entry-save]'
+                )
+              : null;
+
+          if (
+            !textarea
+            || !saveButton
+          ) {
+            return;
+          }
+
+          const text =
+            textarea.value.trim();
+
+          if (!text) {
+            quickEntryFeedback.textContent =
+              'Enter some text.';
+
+            textarea.focus();
+            return;
+          }
+
+          quickEntryFeedback.textContent =
+            '';
+
+          saveButton.disabled = true;
+
+          const originalLabel =
+            saveButton.textContent;
+
+          saveButton.textContent =
+            'Saving…';
+
+          try {
+            const response =
+              await fetch(
+                `/api/projects/${
+                  encodeURIComponent(
+                    currentProject
+                  )
+                }/quick-entry`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type':
+                      'application/json',
+                  },
+                  body: JSON.stringify(
+                    {
+                      kind,
+                      text,
+                    }
+                  ),
+                }
+              );
+
+            if (!response.ok) {
+              throw new Error(
+                'Entry could not be saved'
+              );
+            }
+
+            textarea.value = '';
+            closeQuickEntries();
+
+            quickEntryFeedback.textContent =
+              kind === 'status'
+                ? 'Status added.'
+                : 'Todo added.';
+
+            window.setTimeout(
+              () => {
+                quickEntryFeedback.textContent =
+                  '';
+              },
+              1800
+            );
+          } catch (_error) {
+            quickEntryFeedback.textContent =
+              'Could not save the entry.';
+          } finally {
+            saveButton.disabled = false;
+            saveButton.textContent =
+              originalLabel;
+          }
+        };
+
+      if (quickEntryRoot) {
+        quickEntryRoot.addEventListener(
+          'click',
+          (event) => {
+            const element =
+              event.target instanceof Element
+                ? event.target
+                : null;
+
+            if (!element) {
+              return;
+            }
+
+            const toggle =
+              element.closest(
+                '[data-quick-entry-toggle]'
+              );
+
+            if (toggle) {
+              openQuickEntry(
+                toggle.dataset.quickEntryToggle
+              );
+
+              return;
+            }
+
+            const save =
+              element.closest(
+                '[data-quick-entry-save]'
+              );
+
+            if (save) {
+              saveQuickEntry(
+                save.dataset.quickEntrySave
+              );
+
+              return;
+            }
+
+            const cancel =
+              element.closest(
+                '[data-quick-entry-cancel]'
+              );
+
+            if (cancel) {
+              closeQuickEntries();
+              quickEntryFeedback.textContent =
+                '';
+            }
+          }
+        );
+      }
+
+      document.addEventListener(
+        'keydown',
+        (event) => {
+          if (event.key !== 'Escape') {
+            return;
+          }
+
+          const hasOpenQuickEntry =
+            quickEntryPanels.some(
+              (entryPanel) => (
+                !entryPanel.hidden
+              )
+            );
+
+          if (!hasOpenQuickEntry) {
+            return;
+          }
+
+          event.preventDefault();
+
+          closeQuickEntries();
+
+          if (quickEntryFeedback) {
+            quickEntryFeedback.textContent =
+              '';
+          }
+        }
+      );
+
       const panel =
         document.getElementById(
           'projects-panel'
@@ -1406,5 +2024,291 @@
       src="/static/editor/editor.js"
     ></script>
   {% endif %}
+
+  <script>
+    (() => {
+      const root =
+        document.getElementById(
+          'duck-session-state'
+        );
+
+      if (!root) {
+        return;
+      }
+
+      const feedback =
+        document.getElementById(
+          'duck-session-feedback'
+        );
+
+      const saveButton =
+        document.getElementById(
+          'duck-save-session-state'
+        );
+
+      const templateElement =
+        document.getElementById(
+          'duck-prompt-templates'
+        );
+
+      let promptTemplates = {};
+
+      try {
+        promptTemplates = JSON.parse(
+          templateElement
+            ? templateElement.textContent
+            : '{}'
+        );
+      } catch (_error) {
+        promptTemplates = {};
+      }
+
+      const fields =
+        Array.from(
+          root.querySelectorAll(
+            '[data-session-field]'
+          )
+        );
+
+      const fieldValues = () => {
+        const values = {};
+
+        for (const field of fields) {
+          values[
+            field.dataset.sessionField
+          ] = field.value;
+        }
+
+        return values;
+      };
+
+      const promptContext = () => ({
+        project_title:
+          root.dataset.projectTitle || '',
+        status:
+          root.dataset.status || '',
+        category:
+          root.dataset.category || '',
+        priority:
+          root.dataset.priority || '',
+        class:
+          root.dataset.class || '',
+        type:
+          root.dataset.type || '',
+        ...fieldValues(),
+      });
+
+      const renderPrompt = (
+        template
+      ) => {
+        const values =
+          promptContext();
+
+        return template.replace(
+          /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
+          (
+            original,
+            key
+          ) => (
+            Object.prototype
+              .hasOwnProperty.call(
+                values,
+                key
+              )
+              ? values[key]
+              : original
+          )
+        );
+      };
+
+      const copyFallback = (
+        value
+      ) => {
+        const textarea =
+          document.createElement(
+            'textarea'
+          );
+
+        textarea.value = value;
+        textarea.setAttribute(
+          'readonly',
+          ''
+        );
+
+        textarea.style.position =
+          'fixed';
+
+        textarea.style.opacity =
+          '0';
+
+        document.body.appendChild(
+          textarea
+        );
+
+        textarea.select();
+
+        const copied =
+          document.execCommand(
+            'copy'
+          );
+
+        textarea.remove();
+
+        if (!copied) {
+          throw new Error(
+            'Clipboard copy failed'
+          );
+        }
+      };
+
+      const copyText = async (
+        value
+      ) => {
+        if (
+          navigator.clipboard
+          && window.isSecureContext
+        ) {
+          await navigator.clipboard
+            .writeText(value);
+
+          return;
+        }
+
+        copyFallback(value);
+      };
+
+      root.addEventListener(
+        'click',
+        async (event) => {
+          const target =
+            event.target instanceof Element
+              ? event.target.closest(
+                  '[data-copy-prompt]'
+                )
+              : null;
+
+          if (!target) {
+            return;
+          }
+
+          const key =
+            target.dataset.copyPrompt;
+
+          const template =
+            promptTemplates[key] || '';
+
+          if (!template.trim()) {
+            feedback.textContent =
+              'No prompt template is configured for this field.';
+
+            return;
+          }
+
+          const rendered =
+            renderPrompt(template);
+
+          const originalLabel =
+            target.textContent;
+
+          target.disabled = true;
+
+          try {
+            await copyText(rendered);
+
+            target.textContent =
+              'Copied';
+
+            feedback.textContent =
+              'Prompt copied.';
+          } catch (_error) {
+            feedback.textContent =
+              'Prompt could not be copied.';
+          } finally {
+            window.setTimeout(
+              () => {
+                target.disabled = false;
+                target.textContent =
+                  originalLabel;
+
+                if (
+                  feedback.textContent
+                  === 'Prompt copied.'
+                ) {
+                  feedback.textContent =
+                    '';
+                }
+              },
+              1400
+            );
+          }
+        }
+      );
+
+      saveButton.addEventListener(
+        'click',
+        async () => {
+          const originalLabel =
+            saveButton.textContent;
+
+          saveButton.disabled = true;
+          saveButton.textContent =
+            'Saving…';
+
+          feedback.textContent = '';
+
+          try {
+            const response =
+              await fetch(
+                `/api/projects/${
+                  encodeURIComponent(
+                    root.dataset.project
+                  )
+                }/session-values`,
+                {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type':
+                      'application/json',
+                  },
+                  body: JSON.stringify(
+                    fieldValues()
+                  ),
+                }
+              );
+
+            if (!response.ok) {
+              throw new Error(
+                'Save failed'
+              );
+            }
+
+            feedback.textContent =
+              'Project state saved.';
+          } catch (_error) {
+            feedback.textContent =
+              'Project state could not be saved.';
+          } finally {
+            saveButton.disabled = false;
+            saveButton.textContent =
+              originalLabel;
+
+            window.setTimeout(
+              () => {
+                if (
+                  feedback.textContent
+                  === 'Project state saved.'
+                ) {
+                  feedback.textContent =
+                    '';
+                }
+              },
+              1800
+            );
+          }
+        }
+      );
+    })();
+  </script>
+
 </body>
 </html>

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+  <title>Duck - {{ project_title }} Settings</title>
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', path='/app.css') }}"
+  >
+</head>
+
+<body class="duck-settings-page">
+  <header class="topbar">
+    <a class="brand" href="/">
+      Duck
+    </a>
+
+    <nav class="duck-settings-navigation">
+      <a
+        href="/project/{{ quote(project, safe='') }}"
+      >Project</a>
+
+      <a href="/settings">
+        System Settings
+      </a>
+    </nav>
+  </header>
+
+  <main class="duck-settings-shell">
+    <header class="duck-settings-header">
+      <div>
+        <h1>{{ project_title }}</h1>
+
+        <p>Project Settings</p>
+      </div>
+    </header>
+
+    {% if saved %}
+      <p class="duck-settings-notice">
+        Project settings saved.
+      </p>
+    {% endif %}
+
+    {% if error %}
+      <p class="duck-settings-error">
+        {{ error }}
+      </p>
+    {% endif %}
+
+    <form
+      method="post"
+      action="/project/{{ quote(project, safe='') }}/settings"
+      class="duck-settings-form"
+    >
+      <section class="duck-settings-section">
+        <h2>Project Qualifiers</h2>
+
+        <p class="duck-settings-help">
+          Available choices are defined in
+          System Settings.
+        </p>
+
+        <div class="duck-project-settings-grid">
+          {% for field in project_fields %}
+            <label class="duck-settings-field">
+              <span>{{ field.label }}</span>
+
+              <select name="{{ field.key }}">
+                <option value="">
+                  Not set
+                </option>
+
+                {% for option in field.options %}
+                  <option
+                    value="{{ option }}"
+                    {% if option == field.current %}
+                      selected
+                    {% endif %}
+                  >
+                    {{ option }}
+                  </option>
+                {% endfor %}
+              </select>
+
+              {% if not field.options %}
+                <small>
+                  No values have been defined in
+                  System Settings.
+                </small>
+              {% endif %}
+            </label>
+          {% endfor %}
+        </div>
+      </section>
+
+      <div class="duck-settings-actions">
+        <button
+          type="submit"
+          class="duck-primary-button"
+        >
+          Save Project Settings
+        </button>
+      </div>
+    </form>
+  </main>
+</body>
+</html>

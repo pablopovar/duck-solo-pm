@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+  <title>Duck - Settings</title>
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', path='/app.css') }}"
+  >
+</head>
+
+<body class="duck-settings-page">
+  <header class="topbar">
+    <a class="brand" href="/">
+      Duck
+    </a>
+
+    <nav class="duck-settings-navigation">
+      <a href="/">Projects</a>
+    </nav>
+  </header>
+
+  <main class="duck-settings-shell">
+    <header class="duck-settings-header">
+      <div>
+        <h1>System Settings</h1>
+
+        <p>
+          Define the values available in
+          each project's settings.
+        </p>
+      </div>
+    </header>
+
+    {% if saved %}
+      <p class="duck-settings-notice">
+        Settings saved.
+      </p>
+    {% endif %}
+
+    {% if error %}
+      <p class="duck-settings-error">
+        {{ error }}
+      </p>
+    {% endif %}
+
+    <form
+      method="post"
+      action="/settings"
+      class="duck-settings-form"
+    >
+      <section class="duck-settings-section">
+        <h2>Available Project Values</h2>
+
+        <p class="duck-settings-help">
+          Enter one value per line. The line order
+          becomes the dropdown order.
+        </p>
+
+        <div class="duck-settings-grid">
+          {% for field in vocabulary_fields %}
+            <label class="duck-settings-field">
+              <span>{{ field.label }}</span>
+
+              <textarea
+                name="vocabulary_{{ field.key }}"
+                rows="8"
+                spellcheck="false"
+              >{{ settings["vocabularies"][field.key] | join("\n") }}</textarea>
+            </label>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="duck-settings-section">
+        <h2>Prompt Templates</h2>
+
+        <p class="duck-settings-help">
+          Templates remain blank until you define
+          them. They may use project and session
+          placeholders later.
+        </p>
+
+        <div class="duck-prompt-settings">
+          {% for field in prompt_fields %}
+            <label class="duck-settings-field">
+              <span>{{ field.label }}</span>
+
+              <textarea
+                name="prompt_{{ field.key }}"
+                rows="10"
+                spellcheck="true"
+              >{{ settings["prompts"][field.key] }}</textarea>
+            </label>
+          {% endfor %}
+        </div>
+      </section>
+
+      <div class="duck-settings-actions">
+        <button
+          type="submit"
+          class="duck-primary-button"
+        >
+          Save System Settings
+        </button>
+      </div>
+    </form>
+  </main>
+</body>
+</html>

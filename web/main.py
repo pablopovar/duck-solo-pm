@@ -15,6 +15,21 @@ from fastapi.templating import Jinja2Templates
 from markdown_it import MarkdownIt
 from pydantic import BaseModel
 
+from app.engine.duck_settings import (
+    DuckSettingsError,
+    PROMPT_KEYS,
+    PROJECT_QUALIFIER_KEYS,
+    QUALIFIER_VOCABULARIES,
+    SESSION_VALUE_KEYS,
+    VOCABULARY_KEYS,
+    load_project_settings,
+    load_session_values,
+    load_system_settings,
+    save_project_settings,
+    save_session_values,
+    save_system_settings,
+)
+
 from app.engine.projects import (
     EditableFileNotAllowed,
     ProjectAlreadyConfigured,
@@ -84,6 +99,21 @@ class MarkdownUpdate(BaseModel):
 
 class StatusUpdate(BaseModel):
     update: str = ""
+
+
+class QuickEntry(BaseModel):
+    kind: str = ""
+    text: str = ""
+
+
+# DUCK SETTINGS SUBSYSTEM
+
+
+class SessionValuesUpdate(BaseModel):
+    current_state: str = ""
+    next_action: str = ""
+    unresolved_decisions: str = ""
+    milestone_definition: str = ""
 
 
 def render_dashboard(source: str) -> str:
@@ -245,6 +275,40 @@ def reminder_settings() -> dict[str, object]:
     }
 
 
+def duck_settings_context(
+    project: str | None,
+) -> dict[str, object]:
+    try:
+        system_settings = load_system_settings()
+
+        if project:
+            project_qualifiers = (
+                load_project_settings(project)
+            )
+            session_values = (
+                load_session_values(project)
+            )
+        else:
+            project_qualifiers = {}
+            session_values = {}
+    except DuckSettingsError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "system_settings": system_settings,
+        "prompt_templates": system_settings[
+            "prompts"
+        ],
+        "project_qualifiers": (
+            project_qualifiers
+        ),
+        "session_values": session_values,
+    }
+
+
 def context(
     request: Request,
     *,
@@ -277,6 +341,7 @@ def context(
         "local_repo": local_repo,
         "reminders": reminder_settings(),
         "error": error,
+        **duck_settings_context(project),
         "quote": quote,
     }
 
@@ -575,6 +640,155 @@ def append_status_update(
     }
 
 
+def _quick_entry_timestamp() -> str:
+    try:
+        timezone = ZoneInfo(
+            os.environ.get(
+                "POCKET_TIMEZONE",
+                "America/New_York",
+            )
+        )
+    except Exception:
+        timezone = ZoneInfo("UTC")
+
+    return datetime.now(
+        timezone
+    ).strftime(
+        "%m/%d/%Y %I:%M %p"
+    )
+
+
+def _normalized_entry_lines(
+    text: str,
+) -> list[str]:
+    normalized = text.replace(
+        "\r\n",
+        "\n",
+    ).replace(
+        "\r",
+        "\n",
+    )
+
+    lines = [
+        line.rstrip()
+        for line in normalized.split("\n")
+    ]
+
+    while lines and not lines[0].strip():
+        lines.pop(0)
+
+    while lines and not lines[-1].strip():
+        lines.pop()
+
+    return lines
+
+
+def _format_quick_entry(
+    kind: str,
+    text: str,
+) -> str:
+    lines = _normalized_entry_lines(
+        text
+    )
+
+    if not lines:
+        raise HTTPException(
+            status_code=400,
+            detail="Entry cannot be empty",
+        )
+
+    timestamp = _quick_entry_timestamp()
+
+    if kind == "status":
+        prefix = "-"
+    elif kind == "todo":
+        prefix = "- [ ]"
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Unknown entry type",
+        )
+
+    first = lines[0].strip()
+
+    entry = (
+        f"{prefix} **{timestamp}**"
+    )
+
+    if first:
+        entry += f" — {first}"
+
+    for line in lines[1:]:
+        entry += f"\n  {line}"
+
+    return f"{entry}\n"
+
+
+@app.post(
+    "/api/projects/{project}/quick-entry",
+)
+def add_quick_entry(
+    project: str,
+    entry: QuickEntry,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+
+    kind = entry.kind.strip().casefold()
+
+    if kind == "status":
+        file_label = "status.md"
+    elif kind == "todo":
+        file_label = "inbox.md"
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Unknown entry type",
+        )
+
+    formatted = _format_quick_entry(
+        kind,
+        entry.text,
+    )
+
+    try:
+        current = read_editable_markdown(
+            project,
+            file_label,
+        )
+
+        body = str(
+            current["body"]
+        ).rstrip()
+
+        if body:
+            body += "\n\n"
+
+        body += formatted
+
+        write_editable_markdown(
+            project,
+            file_label,
+            frontmatter=str(
+                current["frontmatter"]
+            ),
+            body=body,
+            has_frontmatter=bool(
+                current["has_frontmatter"]
+            ),
+        )
+    except ProjectError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "saved": True,
+        "kind": kind,
+        "file": file_label,
+    }
+
+
 @app.get(
     "/project/{project}/configure",
     response_class=HTMLResponse,
@@ -708,3 +922,390 @@ async def configure_project(
         ),
         status_code=303,
     )
+
+# ============================================================
+# DUCK SETTINGS SUBSYSTEM ROUTES
+# ============================================================
+
+_DUCK_VOCABULARY_FIELDS = (
+    {
+        "key": "statuses",
+        "label": "Available Statuses",
+    },
+    {
+        "key": "categories",
+        "label": "Available Categories",
+    },
+    {
+        "key": "priorities",
+        "label": "Available Priorities",
+    },
+    {
+        "key": "classes",
+        "label": "Available Classes",
+    },
+    {
+        "key": "types",
+        "label": "Available Types",
+    },
+)
+
+_DUCK_PROMPT_FIELDS = (
+    {
+        "key": "current_state",
+        "label": "Current State Prompt",
+    },
+    {
+        "key": "next_action",
+        "label": "Next Action Prompt",
+    },
+    {
+        "key": "unresolved_decisions",
+        "label": "Unresolved Decisions Prompt",
+    },
+    {
+        "key": "milestone_definition",
+        "label": "Milestone Definition Prompt",
+    },
+)
+
+_DUCK_PROJECT_FIELD_LABELS = {
+    "status": "Status",
+    "category": "Category",
+    "priority": "Priority",
+    "class": "Class",
+    "type": "Type",
+}
+
+
+def _duck_form_field(
+    parsed: dict[str, list[str]],
+    name: str,
+) -> str:
+    values = parsed.get(
+        name,
+        [""],
+    )
+
+    return values[-1]
+
+
+def _duck_form_lines(
+    parsed: dict[str, list[str]],
+    name: str,
+) -> list[str]:
+    value = _duck_form_field(
+        parsed,
+        name,
+    )
+
+    return value.replace(
+        "\r\n",
+        "\n",
+    ).replace(
+        "\r",
+        "\n",
+    ).split(
+        "\n"
+    )
+
+
+def _duck_system_settings_context(
+    request: Request,
+    *,
+    error: str | None = None,
+) -> dict[str, object]:
+    return {
+        "request": request,
+        "settings": load_system_settings(),
+        "vocabulary_fields": (
+            _DUCK_VOCABULARY_FIELDS
+        ),
+        "prompt_fields": (
+            _DUCK_PROMPT_FIELDS
+        ),
+        "saved": (
+            request.query_params.get(
+                "saved"
+            )
+            == "1"
+        ),
+        "error": error,
+    }
+
+
+@app.get(
+    "/settings",
+    response_class=HTMLResponse,
+)
+def duck_system_settings_page(
+    request: Request,
+) -> HTMLResponse:
+    try:
+        page_context = (
+            _duck_system_settings_context(
+                request
+            )
+        )
+    except DuckSettingsError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
+
+    return templates.TemplateResponse(
+        request=request,
+        name="settings.html",
+        context=page_context,
+    )
+
+
+@app.post(
+    "/settings",
+    response_class=HTMLResponse,
+)
+async def save_duck_system_settings(
+    request: Request,
+) -> HTMLResponse:
+    body = (
+        await request.body()
+    ).decode(
+        "utf-8",
+        errors="replace",
+    )
+
+    parsed = parse_qs(
+        body,
+        keep_blank_values=True,
+    )
+
+    vocabularies = {
+        key: _duck_form_lines(
+            parsed,
+            f"vocabulary_{key}",
+        )
+        for key in VOCABULARY_KEYS
+    }
+
+    prompts = {
+        key: _duck_form_field(
+            parsed,
+            f"prompt_{key}",
+        )
+        for key in PROMPT_KEYS
+    }
+
+    try:
+        save_system_settings(
+            vocabularies=vocabularies,
+            prompts=prompts,
+        )
+    except DuckSettingsError as exc:
+        return templates.TemplateResponse(
+            request=request,
+            name="settings.html",
+            context=(
+                _duck_system_settings_context(
+                    request,
+                    error=str(exc),
+                )
+            ),
+            status_code=400,
+        )
+
+    return RedirectResponse(
+        url="/settings?saved=1",
+        status_code=303,
+    )
+
+
+def _duck_project_settings_context(
+    request: Request,
+    project: str,
+    *,
+    error: str | None = None,
+) -> dict[str, object]:
+    system_settings = (
+        load_system_settings()
+    )
+
+    current_settings = (
+        load_project_settings(project)
+    )
+
+    project_fields: list[
+        dict[str, object]
+    ] = []
+
+    for key in PROJECT_QUALIFIER_KEYS:
+        vocabulary_key = (
+            QUALIFIER_VOCABULARIES[key]
+        )
+
+        options = list(
+            system_settings[
+                "vocabularies"
+            ][vocabulary_key]
+        )
+
+        current = current_settings.get(
+            key,
+            "",
+        )
+
+        if current and current not in options:
+            options.insert(
+                0,
+                current,
+            )
+
+        project_fields.append(
+            {
+                "key": key,
+                "label": (
+                    _DUCK_PROJECT_FIELD_LABELS[
+                        key
+                    ]
+                ),
+                "current": current,
+                "options": options,
+            }
+        )
+
+    return {
+        "request": request,
+        "project": project,
+        "project_title": (
+            project_title(project)
+        ),
+        "project_fields": project_fields,
+        "saved": (
+            request.query_params.get(
+                "saved"
+            )
+            == "1"
+        ),
+        "error": error,
+        "quote": quote,
+    }
+
+
+@app.get(
+    "/project/{project}/settings",
+    response_class=HTMLResponse,
+)
+def duck_project_settings_page(
+    request: Request,
+    project: str,
+) -> HTMLResponse:
+    ensure_project_configured(project)
+
+    try:
+        page_context = (
+            _duck_project_settings_context(
+                request,
+                project,
+            )
+        )
+    except DuckSettingsError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
+
+    return templates.TemplateResponse(
+        request=request,
+        name="project_settings.html",
+        context=page_context,
+    )
+
+
+@app.post(
+    "/project/{project}/settings",
+    response_class=HTMLResponse,
+)
+async def save_duck_project_settings(
+    request: Request,
+    project: str,
+) -> HTMLResponse:
+    ensure_project_configured(project)
+
+    body = (
+        await request.body()
+    ).decode(
+        "utf-8",
+        errors="replace",
+    )
+
+    parsed = parse_qs(
+        body,
+        keep_blank_values=True,
+    )
+
+    values = {
+        key: _duck_form_field(
+            parsed,
+            key,
+        )
+        for key in PROJECT_QUALIFIER_KEYS
+    }
+
+    try:
+        save_project_settings(
+            project,
+            values,
+        )
+    except DuckSettingsError as exc:
+        return templates.TemplateResponse(
+            request=request,
+            name="project_settings.html",
+            context=(
+                _duck_project_settings_context(
+                    request,
+                    project,
+                    error=str(exc),
+                )
+            ),
+            status_code=400,
+        )
+
+    return RedirectResponse(
+        url=(
+            f"/project/"
+            f"{quote(project, safe='')}"
+            f"/settings?saved=1"
+        ),
+        status_code=303,
+    )
+
+
+@app.put(
+    "/api/projects/{project}/session-values",
+)
+def update_duck_session_values(
+    project: str,
+    update: SessionValuesUpdate,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+
+    try:
+        values = save_session_values(
+            project,
+            {
+                key: getattr(
+                    update,
+                    key,
+                )
+                for key in SESSION_VALUE_KEYS
+            },
+        )
+    except DuckSettingsError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "saved": True,
+        "values": values,
+    }

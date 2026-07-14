@@ -826,3 +826,467 @@ body {
   cursor: wait;
   opacity: 0.62;
 }
+
+
+/* Duck central and quick entries */
+
+.duck-central-details {
+  margin: 0 0 24px;
+  border: 1px solid
+    rgb(79 102 117 / 40%);
+  border-radius: 8px;
+  background:
+    rgb(255 255 255 / 24%);
+}
+
+.duck-central-details summary {
+  padding: 13px 16px;
+  color:
+    var(--duck-gunmetal, #4f6675);
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.duck-central-details[open] summary {
+  border-bottom: 1px solid
+    rgb(79 102 117 / 30%);
+}
+
+.duck-central-content {
+  padding: 16px;
+}
+
+.duck-central-content > :first-child {
+  margin-top: 0;
+}
+
+.duck-central-content > :last-child {
+  margin-bottom: 0;
+}
+
+.duck-quick-entry {
+  margin: 0 0 22px;
+}
+
+.duck-quick-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.duck-quick-entry-toggle,
+.duck-quick-entry-save {
+  min-height: 38px;
+  padding: 8px 16px;
+  border: 1px solid
+    var(--duck-orange, #ed7014);
+  border-radius: 6px;
+  background:
+    var(--duck-orange, #ed7014);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.duck-quick-entry-toggle:hover,
+.duck-quick-entry-save:hover {
+  border-color: #cf5d0c;
+  background: #cf5d0c;
+}
+
+.duck-quick-entry-panel {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid
+    rgb(79 102 117 / 45%);
+  border-radius: 8px;
+  background:
+    rgb(255 255 255 / 28%);
+}
+
+.duck-quick-entry-panel[hidden] {
+  display: none;
+}
+
+.duck-quick-entry-panel label {
+  display: block;
+  margin-bottom: 8px;
+  color:
+    var(--duck-gunmetal, #4f6675);
+  font-weight: 700;
+}
+
+.duck-quick-entry-panel textarea {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 130px;
+  padding: 11px 13px;
+  resize: vertical;
+  border: 2px solid
+    var(--duck-gunmetal, #4f6675);
+  border-radius: 6px;
+  background: #f6f6f6;
+  color:
+    var(--duck-gunmetal, #4f6675);
+  font: inherit;
+  line-height: 1.45;
+}
+
+.duck-quick-entry-panel textarea:focus {
+  border-color:
+    var(--duck-orange, #ed7014);
+  outline: 2px solid
+    var(--duck-orange, #ed7014);
+  outline-offset: 2px;
+}
+
+.duck-quick-entry-panel-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.duck-quick-entry-cancel {
+  min-height: 38px;
+  padding: 8px 16px;
+  border: 1px solid
+    var(--duck-gunmetal, #4f6675);
+  border-radius: 6px;
+  background: transparent;
+  color:
+    var(--duck-gunmetal, #4f6675);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.duck-quick-entry-cancel:hover {
+  background:
+    rgb(79 102 117 / 12%);
+}
+
+.duck-quick-entry-feedback {
+  min-height: 20px;
+  margin: 8px 0 0;
+  color:
+    var(--duck-gunmetal, #4f6675);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+
+/* ==========================================================
+   DUCK SETTINGS SUBSYSTEM
+   ========================================================== */
+
+.duck-topbar-settings,
+.duck-settings-navigation {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.duck-topbar-settings a,
+.duck-settings-navigation a {
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.duck-topbar-settings a:hover,
+.duck-settings-navigation a:hover {
+  text-decoration: underline;
+}
+
+.duck-settings-page {
+  background: #c0c0c0;
+  color: #4f6675;
+}
+
+.duck-settings-shell {
+  width: min(1180px, calc(100% - 40px));
+  margin: 28px auto 60px;
+}
+
+.duck-settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.duck-settings-header h1 {
+  margin: 0 0 5px;
+}
+
+.duck-settings-header p {
+  margin: 0;
+}
+
+.duck-settings-form {
+  display: grid;
+  gap: 24px;
+}
+
+.duck-settings-section {
+  padding: 22px;
+  border: 1px solid
+    rgb(79 102 117 / 45%);
+  border-radius: 9px;
+  background: rgb(255 255 255 / 32%);
+}
+
+.duck-settings-section h2 {
+  margin: 0 0 5px;
+}
+
+.duck-settings-help {
+  margin: 0 0 18px;
+}
+
+.duck-settings-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(250px, 1fr)
+    );
+  gap: 18px;
+}
+
+.duck-project-settings-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(220px, 1fr)
+    );
+  gap: 18px;
+}
+
+.duck-prompt-settings {
+  display: grid;
+  gap: 18px;
+}
+
+.duck-settings-field {
+  display: grid;
+  gap: 7px;
+}
+
+.duck-settings-field > span {
+  font-weight: 800;
+}
+
+.duck-settings-field textarea,
+.duck-settings-field select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #4f6675;
+  border-radius: 6px;
+  background: #f7f7f7;
+  color: #4f6675;
+  font: inherit;
+}
+
+.duck-settings-field textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.duck-settings-field textarea:focus,
+.duck-settings-field select:focus {
+  border-color: #ed7014;
+  outline: 2px solid #ed7014;
+  outline-offset: 2px;
+}
+
+.duck-settings-field small {
+  line-height: 1.35;
+}
+
+.duck-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.duck-primary-button {
+  min-height: 39px;
+  padding: 8px 17px;
+  border: 1px solid #ed7014;
+  border-radius: 6px;
+  background: #ed7014;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.duck-primary-button:hover {
+  border-color: #cf5d0c;
+  background: #cf5d0c;
+}
+
+.duck-primary-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.duck-settings-notice,
+.duck-settings-error {
+  padding: 11px 14px;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.duck-settings-notice {
+  border: 1px solid #4f6675;
+  background: rgb(255 255 255 / 38%);
+}
+
+.duck-settings-error {
+  border: 1px solid #9d2d2d;
+  background: #fff0f0;
+  color: #7f2020;
+}
+
+
+/* Project runtime state */
+
+.duck-session-state {
+  margin: 0 0 24px;
+  padding: 18px;
+  border: 1px solid
+    rgb(79 102 117 / 45%);
+  border-radius: 9px;
+  background: rgb(255 255 255 / 28%);
+}
+
+.duck-session-state-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 17px;
+}
+
+.duck-session-state-header h2 {
+  margin: 0 0 7px;
+}
+
+.duck-project-settings-link {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.duck-project-qualifiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.duck-project-qualifiers span {
+  padding: 4px 8px;
+  border: 1px solid
+    rgb(79 102 117 / 40%);
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.duck-session-fields {
+  display: grid;
+  grid-template-columns:
+    repeat(
+      2,
+      minmax(0, 1fr)
+    );
+  gap: 15px;
+}
+
+.duck-session-field {
+  min-width: 0;
+}
+
+.duck-session-field > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  margin-bottom: 7px;
+}
+
+.duck-session-field label {
+  font-weight: 800;
+}
+
+.duck-session-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100px;
+  padding: 10px 12px;
+  resize: vertical;
+  border: 2px solid #4f6675;
+  border-radius: 6px;
+  background: #f7f7f7;
+  color: #4f6675;
+  font: inherit;
+  line-height: 1.45;
+}
+
+.duck-session-field textarea:focus {
+  border-color: #ed7014;
+  outline: 2px solid #ed7014;
+  outline-offset: 2px;
+}
+
+.duck-copy-prompt {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid #4f6675;
+  border-radius: 5px;
+  background: transparent;
+  color: #4f6675;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.duck-copy-prompt:hover {
+  background: rgb(79 102 117 / 12%);
+}
+
+.duck-session-state-footer {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-top: 15px;
+}
+
+.duck-session-feedback {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+@media (max-width: 850px) {
+  .duck-session-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .duck-session-state-header {
+    flex-direction: column;
+  }
+
+  .duck-settings-shell {
+    width: min(
+      100% - 24px,
+      1180px
+    );
+  }
+}
