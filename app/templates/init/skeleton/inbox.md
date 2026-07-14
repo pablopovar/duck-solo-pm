@@ -1,0 +1,1 @@
+This is a system-wide collector. For now I'll add stuff here manually, in the future I should be able to email, post, mention, pigeon, whatsapp, smoke-signal, ask AI, text, etc. to send anything (ideas, thoughts, files, assets, etc.) to this project

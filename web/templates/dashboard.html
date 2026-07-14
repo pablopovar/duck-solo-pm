@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+  <title>{% if project_title %}{{ project_title }} · {% endif %}Door to Pocket</title>
+
+  <link
+    rel="stylesheet"
+    href="/static/app.css"
+  >
+
+  {% if state == "editor" %}
+    <link
+      rel="stylesheet"
+      href="/static/editor/editor.css"
+    >
+  {% endif %}
+</head>
+
+<body class="{% if project %}project-view{% else %}projects-view{% endif %}">
+  <header class="topbar">
+    {% if project %}
+      <a
+        class="project-back"
+        href="/"
+        title="Back to projects"
+        aria-label="Back to projects"
+      >←</a>
+    {% endif %}
+
+    <button
+      id="sidebar-toggle"
+      class="sidebar-toggle"
+      type="button"
+      aria-label="Collapse projects"
+    >←</button>
+
+    <a class="brand" href="/">
+      Door to Pocket
+    </a>
+  </header>
+
+  <main class="workspace">
+    <aside
+      id="projects-panel"
+      class="projects-panel"
+      aria-label="Projects"
+    >
+      <div class="projects-content">
+        <div class="projects-heading">
+          <h1>Projects</h1>
+
+          <select
+            id="project-sort"
+            class="project-sort"
+            aria-label="Sort projects"
+          >
+            <option value="alphabetical">
+              Alphabetical
+            </option>
+
+            <option value="recent">
+              Recency
+            </option>
+
+            <option value="score">
+              Score
+            </option>
+          </select>
+        </div>
+
+        <nav id="projects-nav">
+          {% for item in projects %}
+            <a
+              class="project-link{% if item.name == project %} active{% endif %}"
+              href="/project/{{ quote(item.name, safe='') }}/open"
+              data-project-name="{{ item.name }}"
+              data-project-score="{{ item.score }}"
+              data-project-recent="{{ item.last_opened }}"
+            >
+              <span class="project-link-name">
+                {{ item.name }}
+              </span>
+
+              <span
+                class="project-score"
+                title="Project score"
+              >{{ item.score }}</span>
+            </a>
+
+          {% else %}
+            <p class="empty">
+              No project folders found.
+            </p>
+          {% endfor %}
+        </nav>
+      </div>
+
+      <div
+        id="sidebar-resizer"
+        class="sidebar-resizer"
+        aria-hidden="true"
+      ></div>
+    </aside>
+
+    <section class="dashboard-panel{% if state == 'editor' %} editor-panel{% endif %}">
+      {% if state == "dashboard" %}
+        <div class="project-heading">
+          <h1>{{ project_title }}</h1>
+
+          <div class="project-heading-actions">
+            <a
+              class="project-desktop-action"
+              href="pocket-open://folder?project={{ quote(project, safe='') }}"
+              title="Open this project in the default file manager"
+            >Open folder</a>
+
+            <a
+              class="project-desktop-action"
+              href="pocket-open://terminal?project={{ quote(project, safe='') }}"
+              title="Open the preferred terminal in this project"
+            >Open terminal</a>
+
+            {% if github_url %}
+              <a
+                class="project-desktop-action"
+                href="{{ github_url }}"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open this project on GitHub"
+              >Open GitHub</a>
+            {% endif %}
+
+            {% if local_repo %}
+              <a
+                class="project-desktop-action"
+                href="pocket-open://local-repo?project={{ quote(project, safe='') }}"
+                title="Open the local repository folder"
+              >Open Local repo</a>
+            {% endif %}
+
+            <a
+              class="secondary-action"
+              href="/project/{{ quote(project, safe='') }}/edit"
+            >Edit Markdown</a>
+          </div>
+        </div>
+
+        <article class="markdown-body">
+          {{ dashboard_html | safe }}
+        </article>
+
+      {% elif state == "editor" %}
+        <div
+          id="markdown-editor-app"
+          class="markdown-editor-app"
+          data-project="{{ project }}"
+          data-default-file="dashboard.md"
+        >
+          <div class="project-heading editor-heading">
+            <h1>{{ project_title }}</h1>
+
+            <a
+              id="editor-cancel"
+              class="secondary-action"
+              href="/project/{{ quote(project, safe='') }}"
+            >Cancel</a>
+          </div>
+
+          <div class="editor-toolbar">
+            <label for="editor-file">File</label>
+
+            <select id="editor-file">
+              {% for file in editor_files %}
+                <option
+                  value="{{ file }}"
+                  {% if file == "dashboard.md" %}selected{% endif %}
+                >{{ file }}</option>
+              {% endfor %}
+            </select>
+
+            <button id="editor-save" type="button">Save</button>
+
+            <span
+              id="editor-status"
+              class="editor-status"
+              aria-live="polite"
+            ></span>
+          </div>
+
+          <details
+            id="frontmatter-panel"
+            class="frontmatter-panel"
+            hidden
+          >
+            <summary>Frontmatter</summary>
+
+            <textarea
+              id="frontmatter-editor"
+              aria-label="Frontmatter"
+              spellcheck="false"
+            ></textarea>
+          </details>
+
+          <div
+            id="crepe-editor"
+            class="crepe-editor"
+          ></div>
+        </div>
+
+      {% elif state == "unconfigured" %}
+        <div class="configuration-prompt">
+          <p>
+            This project isn't configured yet.
+          </p>
+
+          <p>
+            Do you want to configure it now?
+          </p>
+
+          <p>
+            <a
+              href="/project/{{ quote(project, safe='') }}/configure"
+            >yes</a>
+
+            <span> / </span>
+
+            <a href="/">nope</a>
+          </p>
+        </div>
+
+      {% elif state == "configure" %}
+        <div class="configuration-form">
+          <h1>
+            Configure {{ project }}
+          </h1>
+
+          {% if error %}
+            <p class="form-error">
+              {{ error }}
+            </p>
+          {% endif %}
+
+          <form
+            method="post"
+            action="/project/{{ quote(project, safe='') }}/configure"
+          >
+            <label>
+              <span>Project</span>
+
+              <input
+                name="project_name"
+                type="text"
+                required
+              >
+            </label>
+
+            <label>
+              <span>Score</span>
+
+              <input
+                name="score"
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value="0"
+                required
+              >
+            </label>
+
+            <label>
+              <span>Canonical</span>
+
+              <input
+                name="canonical"
+                type="url"
+                required
+              >
+            </label>
+
+            <label>
+              <span>URL</span>
+
+              <input
+                name="url"
+                type="url"
+                required
+              >
+            </label>
+
+
+            <label>
+              <span>ChatGPT URL</span>
+
+              <input
+                name="chatgpt_url"
+                type="url"
+                required
+              >
+            </label>
+
+            <label>
+              <span>GitHub URL</span>
+
+              <input
+                name="repo_url"
+                type="url"
+              >
+            </label>
+
+            <label>
+              <span>Local repo folder</span>
+
+              <input
+                name="local_repo"
+                type="text"
+                placeholder="/absolute/path/to/repo"
+              >
+            </label>
+
+            <label>
+              <span>Custom field 1 title</span>
+
+              <input
+                name="custom_1_title"
+                type="text"
+              >
+            </label>
+
+            <label>
+              <span>Custom field 1 content</span>
+
+              <input
+                name="custom_1_content"
+                type="text"
+              >
+            </label>
+
+            <label>
+              <span>Custom field 2 title</span>
+
+              <input
+                name="custom_2_title"
+                type="text"
+              >
+            </label>
+
+            <label>
+              <span>Custom field 2 content</span>
+
+              <input
+                name="custom_2_content"
+                type="text"
+              >
+            </label>
+
+            <label>
+              <span>Custom field 3 title</span>
+
+              <input
+                name="custom_3_title"
+                type="text"
+              >
+            </label>
+
+            <label>
+              <span>Custom field 3 content</span>
+
+              <input
+                name="custom_3_content"
+                type="text"
+              >
+            </label>
+
+            <button type="submit">
+              Configure project
+            </button>
+          </form>
+        </div>
+
+      {% elif state == "missing_dashboard" %}
+        <div class="placeholder">
+          <p>
+            This project is configured,
+            but .pocket/dashboard.md is missing.
+          </p>
+        </div>
+
+      {% else %}
+        <div class="placeholder">
+          <p>Select a project.</p>
+        </div>
+      {% endif %}
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const body =
+        document.body;
+
+      const panel =
+        document.getElementById(
+          'projects-panel'
+        );
+
+      const resizer =
+        document.getElementById(
+          'sidebar-resizer'
+        );
+
+      const toggle =
+        document.getElementById(
+          'sidebar-toggle'
+        );
+
+      const widthKey =
+        'pocket.projects.width';
+
+      const collapsedKey =
+        'pocket.projects.collapsed';
+
+      const sortKey =
+        'pocket.projects.sort';
+
+      const projectSort =
+        document.getElementById(
+          'project-sort'
+        );
+
+      const projectsNav =
+        document.getElementById(
+          'projects-nav'
+        );
+
+      const compareAlphabetically = (
+        left,
+        right
+      ) => (
+        left.dataset.projectName
+          .localeCompare(
+            right.dataset.projectName,
+            undefined,
+            {
+              sensitivity: 'base',
+              numeric: true,
+            }
+          )
+      );
+
+      const sortProjects = () => {
+        if (
+          !projectSort
+          || !projectsNav
+        ) {
+          return;
+        }
+
+        const mode =
+          projectSort.value;
+
+        const links =
+          Array.from(
+            projectsNav.querySelectorAll(
+              'a.project-link'
+            )
+          );
+
+        links.sort(
+          (left, right) => {
+            if (mode === 'recent') {
+              const difference =
+                Number(
+                  right.dataset.projectRecent
+                )
+                - Number(
+                  left.dataset.projectRecent
+                );
+
+              return (
+                difference
+                || compareAlphabetically(
+                  left,
+                  right
+                )
+              );
+            }
+
+            if (mode === 'score') {
+              const difference =
+                Number(
+                  right.dataset.projectScore
+                )
+                - Number(
+                  left.dataset.projectScore
+                );
+
+              return (
+                difference
+                || compareAlphabetically(
+                  left,
+                  right
+                )
+              );
+            }
+
+            return compareAlphabetically(
+              left,
+              right
+            );
+          }
+        );
+
+        for (const link of links) {
+          projectsNav.appendChild(
+            link
+          );
+        }
+
+        localStorage.setItem(
+          sortKey,
+          mode
+        );
+      };
+
+      if (projectSort) {
+        const savedSort =
+          localStorage.getItem(
+            sortKey
+          );
+
+        if (
+          savedSort === 'alphabetical'
+          || savedSort === 'recent'
+          || savedSort === 'score'
+        ) {
+          projectSort.value =
+            savedSort;
+        }
+
+        projectSort.addEventListener(
+          'change',
+          sortProjects
+        );
+
+        sortProjects();
+      }
+
+      const copyWithFallback = (
+        value
+      ) => {
+        const textarea =
+          document.createElement(
+            'textarea'
+          );
+
+        textarea.value = value;
+        textarea.setAttribute(
+          'readonly',
+          ''
+        );
+
+        textarea.style.position =
+          'fixed';
+
+        textarea.style.opacity =
+          '0';
+
+        document.body.appendChild(
+          textarea
+        );
+
+        textarea.select();
+
+        const copied =
+          document.execCommand(
+            'copy'
+          );
+
+        textarea.remove();
+
+        if (!copied) {
+          throw new Error(
+            'Clipboard copy failed'
+          );
+        }
+      };
+
+      document.addEventListener(
+        'click',
+        async (event) => {
+          const element =
+            event.target instanceof Element
+              ? event.target.closest(
+                  'a.copy-location'
+                )
+              : null;
+
+          if (!element) {
+            return;
+          }
+
+          event.preventDefault();
+
+          const location =
+            element.dataset.copyLocation;
+
+          if (!location) {
+            return;
+          }
+          let feedback =
+            element.nextElementSibling;
+
+          if (
+            feedback
+            && feedback.classList.contains(
+              'copy-feedback'
+            )
+          ) {
+            feedback.remove();
+          }
+
+          feedback =
+            document.createElement(
+              'span'
+            );
+
+          feedback.className =
+            'copy-feedback';
+
+          try {
+            if (
+              navigator.clipboard
+              && window.isSecureContext
+            ) {
+              await navigator.clipboard
+                .writeText(location);
+            } else {
+              copyWithFallback(location);
+            }
+
+            feedback.textContent =
+              ' — Copied';
+          } catch (error) {
+            feedback.textContent =
+              ' — Copy failed';
+          }
+
+          element.insertAdjacentElement(
+            'afterend',
+            feedback
+          );
+
+          window.setTimeout(
+            () => {
+              feedback.remove();
+            },
+            1200
+          );
+        }
+      );
+
+      const savedWidth =
+        Number(
+          localStorage.getItem(
+            widthKey
+          )
+        );
+
+      if (
+        Number.isFinite(savedWidth)
+        && savedWidth >= 160
+        && savedWidth <= 700
+      ) {
+        document.documentElement
+          .style
+          .setProperty(
+            '--projects-width',
+            `${savedWidth}px`
+          );
+      }
+
+      const setCollapsed = (
+        collapsed
+      ) => {
+        body.classList.toggle(
+          'projects-collapsed',
+          collapsed
+        );
+
+        toggle.textContent =
+          collapsed ? '→' : '←';
+
+        toggle.setAttribute(
+          'aria-label',
+          collapsed
+            ? 'Expand projects'
+            : 'Collapse projects'
+        );
+
+        localStorage.setItem(
+          collapsedKey,
+          collapsed ? '1' : '0'
+        );
+      };
+
+      setCollapsed(
+        localStorage.getItem(
+          collapsedKey
+        ) === '1'
+      );
+
+      toggle.addEventListener(
+        'click',
+        () => {
+          setCollapsed(
+            !body.classList.contains(
+              'projects-collapsed'
+            )
+          );
+        }
+      );
+
+      resizer.addEventListener(
+        'pointerdown',
+        (event) => {
+          event.preventDefault();
+
+          resizer.setPointerCapture(
+            event.pointerId
+          );
+
+          const startX =
+            event.clientX;
+
+          const startWidth =
+            panel
+              .getBoundingClientRect()
+              .width;
+
+          const move = (
+            moveEvent
+          ) => {
+            const width =
+              Math.min(
+                700,
+                Math.max(
+                  160,
+                  startWidth
+                    + moveEvent.clientX
+                    - startX
+                )
+              );
+
+            document.documentElement
+              .style
+              .setProperty(
+                '--projects-width',
+                `${width}px`
+              );
+
+            localStorage.setItem(
+              widthKey,
+              String(
+                Math.round(width)
+              )
+            );
+          };
+
+          const stop = () => {
+            resizer.removeEventListener(
+              'pointermove',
+              move
+            );
+
+            resizer.removeEventListener(
+              'pointerup',
+              stop
+            );
+
+            resizer.removeEventListener(
+              'pointercancel',
+              stop
+            );
+          };
+
+          resizer.addEventListener(
+            'pointermove',
+            move
+          );
+
+          resizer.addEventListener(
+            'pointerup',
+            stop
+          );
+
+          resizer.addEventListener(
+            'pointercancel',
+            stop
+          );
+        }
+      );
+    })();
+  </script>
+
+  {% if state == "editor" %}
+    <script
+      type="module"
+      src="/static/editor/editor.js"
+    ></script>
+  {% endif %}
+</body>
+</html>
