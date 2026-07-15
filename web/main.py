@@ -6,8 +6,9 @@ import re
 from datetime import datetime
 from html import escape
 from pathlib import Path
-from urllib.parse import parse_qs, quote, unquote
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 from zoneinfo import ZoneInfo
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -40,12 +41,14 @@ from app.engine.projects import (
     initialize_project,
     is_configured,
     project_summaries,
+    project_root,
     read_dashboard,
     read_project_resources,
     read_editable_markdown,
     touch_project,
     write_editable_markdown,
 )
+from app.engine import project_store
 
 
 WEB_DIR = Path(__file__).resolve().parent
@@ -104,7 +107,18 @@ class StatusUpdate(BaseModel):
 
 class QuickEntry(BaseModel):
     kind: str = ""
+    title: str = ""
     text: str = ""
+
+
+class ActivityPinUpdate(BaseModel):
+    pinned: bool = True
+
+
+class ProjectAboutUpdate(BaseModel):
+    what: str = ""
+    why: str = ""
+    class_name: str = ""
 
 
 # DUCK SETTINGS SUBSYSTEM
@@ -229,8 +243,20 @@ _MARKDOWN_TODO = re.compile(
     r"^\s*[-*]\s+\[(?P<done>[ xX])\]\s+(?P<title>.+?)\s*$"
 )
 
+_MARKDOWN_CONTINUATION = re.compile(
+    r"^\s{2,}(?P<body>.*)$"
+)
+
+_QUICK_ENTRY_TITLE = re.compile(
+    r"^\*\*(?P<timestamp>.+?)\*\*\s+[\u2014-]\s*(?P<body>.*)$"
+)
+
 _STATUS_ACTIVITY = re.compile(
     r"^\s*[-*]\s+\*\*(?P<timestamp>.+?)\*\*\s+[—-]\s+(?P<body>.+?)\s*$"
+)
+
+_LINK_INPUT_URL = re.compile(
+    r"https?://[^\s<>\"']+"
 )
 
 
@@ -395,6 +421,7 @@ def _project_todos(
     project: str,
 ) -> list[dict[str, object]]:
     todos: list[dict[str, object]] = []
+    current: dict[str, object] | None = None
 
     for line in _read_project_file_body(
         project,
@@ -402,19 +429,46 @@ def _project_todos(
     ).splitlines():
         match = _MARKDOWN_TODO.match(line)
 
-        if match is None:
-            continue
+        if match is not None:
+            if current is not None:
+                todos.append(current)
 
-        todos.append(
-            {
-                "title": match.group("title"),
+            title = match.group("title")
+            timestamp = ""
+            quick_entry = _QUICK_ENTRY_TITLE.match(title)
+
+            if quick_entry is not None:
+                timestamp = quick_entry.group("timestamp")
+                title = quick_entry.group("body")
+
+            current = {
+                "title": title,
                 "completed": (
                     match.group("done")
                     .casefold()
                     == "x"
                 ),
+                "timestamp": timestamp,
             }
-        )
+            continue
+
+        if current is None:
+            continue
+
+        continuation = _MARKDOWN_CONTINUATION.match(line)
+
+        if continuation is not None:
+            current["title"] = (
+                f'{current["title"]}\n'
+                f'{continuation.group("body")}'
+            )
+            continue
+
+        todos.append(current)
+        current = None
+
+    if current is not None:
+        todos.append(current)
 
     return todos
 
@@ -484,14 +538,474 @@ def _project_quick_links(
         }
     )
 
+    links.append(
+        {
+            "label": "Open Terminal",
+            "url": (
+                "pocket-open://terminal"
+                f"?project={quote(project, safe='')}"
+            ),
+            "icon": ">_",
+            "external": False,
+        }
+    )
+
     return links
 
 
-def _project_feed_items(
+def _activity_store_path(
     project: str,
-    todos: list[dict[str, object]],
+) -> Path:
+    return (
+        project_root(project)
+        / ".pocket"
+        / "activity.jsonl"
+    )
+
+
+def _activity_feed_items(
+    project: str,
+) -> list[dict[str, object]]:
+    path = _activity_store_path(project)
+
+    try:
+        lines = path.read_text(
+            encoding="utf-8",
+            errors="replace",
+        ).splitlines()
+    except FileNotFoundError:
+        return []
+    except OSError:
+        return []
+
+    presentations = {
+        "note": {
+            "label": "Note",
+            "title": "Note",
+            "icon": "▤",
+        },
+        "link": {
+            "label": "Link",
+            "title": "Shared link",
+            "icon": "↗",
+        },
+    }
+
+    items: list[dict[str, object]] = []
+
+    for raw_line in reversed(lines[-100:]):
+        try:
+            record = json.loads(raw_line)
+        except json.JSONDecodeError:
+            continue
+
+        if not isinstance(record, dict):
+            continue
+
+        kind = record.get("type")
+
+        if (
+            not isinstance(kind, str)
+            or kind not in presentations
+        ):
+            continue
+
+        body = record.get("body")
+
+        if not isinstance(body, str) or not body.strip():
+            continue
+
+        url = record.get("url", "")
+
+        if not isinstance(url, str):
+            url = ""
+
+        presentation = presentations[kind]
+
+        items.append(
+            {
+                "type": kind,
+                "id": str(record.get("id", "")),
+                "label": presentation["label"],
+                "title": presentation["title"],
+                "body": body,
+                "timestamp": str(
+                    record.get("timestamp", "")
+                ),
+                "source": ".pocket/activity.jsonl",
+                "icon": presentation["icon"],
+                "url": url,
+                "pinned": bool(
+                    record.get("pinned", False)
+                ),
+            }
+        )
+
+    return items
+
+
+def _pinned_activity_resources(
+    project: str,
 ) -> list[dict[str, str]]:
-    items: list[dict[str, str]] = []
+    path = _activity_store_path(project)
+
+    try:
+        lines = path.read_text(
+            encoding="utf-8",
+            errors="replace",
+        ).splitlines()
+    except (FileNotFoundError, OSError):
+        return []
+
+    resources: list[dict[str, str]] = []
+
+    for raw_line in reversed(lines):
+        try:
+            record = json.loads(raw_line)
+        except json.JSONDecodeError:
+            continue
+
+        if not isinstance(record, dict):
+            continue
+
+        kind = record.get("type")
+
+        if (
+            kind not in {"link", "file", "document"}
+            or record.get("pinned") is not True
+        ):
+            continue
+
+        body = record.get("body")
+        url = record.get("url", "")
+
+        if not isinstance(body, str) or not body.strip():
+            continue
+
+        if not isinstance(url, str):
+            url = ""
+
+        resources.append(
+            {
+                "id": str(record.get("id", "")),
+                "type": str(kind),
+                "label": body.strip(),
+                "url": url,
+                "icon": "\u2197" if kind == "link" else "\u25b1",
+            }
+        )
+
+    return resources
+
+
+def _set_activity_resource_pinned(
+    project: str,
+    activity_id: str,
+    pinned: bool,
+) -> None:
+    path = _activity_store_path(project)
+
+    try:
+        lines = path.read_text(
+            encoding="utf-8",
+            errors="strict",
+        ).splitlines()
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail="Activity item not found",
+        ) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not read project activity",
+        ) from exc
+
+    found = False
+    updated_lines: list[str] = []
+
+    for raw_line in lines:
+        try:
+            record = json.loads(raw_line)
+        except json.JSONDecodeError:
+            updated_lines.append(raw_line)
+            continue
+
+        if (
+            isinstance(record, dict)
+            and record.get("id") == activity_id
+            and record.get("type")
+            in {"link", "file", "document"}
+        ):
+            record["pinned"] = pinned
+            updated_lines.append(
+                json.dumps(
+                    record,
+                    ensure_ascii=False,
+                )
+            )
+            found = True
+        else:
+            updated_lines.append(raw_line)
+
+    if not found:
+        raise HTTPException(
+            status_code=404,
+            detail="Pinnable activity item not found",
+        )
+
+    temporary = path.with_name(
+        f"{path.name}.{uuid4().hex}.tmp"
+    )
+
+    try:
+        temporary.write_text(
+            "\n".join(updated_lines) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, path)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not update project activity",
+        ) from exc
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _activity_entry_data(
+    kind: str,
+    text: str,
+) -> tuple[str, str]:
+    lines = _normalized_entry_lines(text)
+
+    if not lines:
+        raise HTTPException(
+            status_code=400,
+            detail="Entry cannot be empty",
+        )
+
+    content = "\n".join(lines).strip()
+
+    if kind == "note" and len(content) > 2000:
+        raise HTTPException(
+            status_code=400,
+            detail="Notes are limited to 2,000 characters",
+        )
+
+    if kind == "link" and len(content) > 20000:
+        raise HTTPException(
+            status_code=400,
+            detail="Entry is too long",
+        )
+
+    if kind == "note":
+        return content, ""
+
+    match = _LINK_INPUT_URL.search(content)
+
+    if match is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "A link entry needs an http:// or "
+                "https:// URL"
+            ),
+        )
+
+    raw_url = match.group(0)
+    url = raw_url.rstrip(".,;")
+    parsed = urlsplit(url)
+
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="The link URL is not valid",
+        )
+
+    label = (
+        content[:match.start()]
+        + content[match.end():]
+    ).strip(" \t\r\n—-:")
+
+    return label or url, url
+
+
+def _append_activity_record(
+    project: str,
+    kind: str,
+    text: str,
+) -> dict[str, object]:
+    body, url = _activity_entry_data(
+        kind,
+        text,
+    )
+
+    record = {
+        "version": 1,
+        "id": str(uuid4()),
+        "type": kind,
+        "body": body,
+        "url": url,
+        "timestamp": _quick_entry_timestamp(),
+    }
+
+    path = _activity_store_path(project)
+
+    try:
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        with path.open(
+            "a",
+            encoding="utf-8",
+        ) as handle:
+            handle.write(
+                json.dumps(
+                    record,
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save project activity",
+        ) from exc
+
+    return {
+        "saved": True,
+        "kind": kind,
+        "file": ".pocket/activity.jsonl",
+    }
+
+
+def _legacy_activity_uuid(
+    project: str,
+    kind: str,
+    position: int,
+    content: str,
+) -> str:
+    return str(
+        uuid5(
+            NAMESPACE_URL,
+            f"duck:{project}:{kind}:{position}:{content}",
+        )
+    )
+
+
+def _legacy_title_and_body(text: str) -> tuple[str, str]:
+    lines = _normalized_entry_lines(text)
+
+    if not lines:
+        return "Untitled", ""
+
+    first_line = lines[0].strip() or "Untitled"
+    title = (
+        first_line
+        if len(first_line) <= 160
+        else first_line[:157].rstrip() + "..."
+    )
+    body = "\n".join(lines).strip()
+    return title, body
+
+
+def _legacy_activity_records(
+    project: str,
+) -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
+    fallback_time = _quick_entry_timestamp()
+    path = _activity_store_path(project)
+
+    try:
+        jsonl_lines = path.read_text(
+            encoding="utf-8",
+            errors="replace",
+        ).splitlines()
+    except (FileNotFoundError, OSError):
+        jsonl_lines = []
+
+    for position, raw_line in enumerate(jsonl_lines):
+        try:
+            record = json.loads(raw_line)
+        except json.JSONDecodeError:
+            continue
+
+        if not isinstance(record, dict):
+            continue
+
+        kind = record.get("type")
+
+        if kind not in {"note", "link"}:
+            continue
+
+        old_body = str(record.get("body", "")).strip()
+        url = str(record.get("url", "")).strip()
+        stored_title = str(record.get("title", "")).strip()
+
+        if kind == "link":
+            title = stored_title or old_body or url or "Link"
+            body = url or old_body
+        else:
+            derived_title, _derived_body = _legacy_title_and_body(
+                old_body
+            )
+            title = stored_title or derived_title
+            body = old_body
+
+        timestamp = str(
+            record.get("timestamp", fallback_time)
+        )
+
+        records.append(
+            {
+                "id": str(record.get("id", ""))
+                or _legacy_activity_uuid(
+                    project,
+                    str(kind),
+                    position,
+                    raw_line,
+                ),
+                "kind": str(kind),
+                "title": title,
+                "body": body,
+                "url": url,
+                "completed": False,
+                "pinned": bool(record.get("pinned", False)),
+                "created_at": timestamp,
+                "updated_at": timestamp,
+            }
+        )
+
+    for position, todo in enumerate(_project_todos(project)):
+        full_text = str(todo.get("title", "")).strip()
+        title, body = _legacy_title_and_body(full_text)
+        timestamp = str(todo.get("timestamp", "")) or fallback_time
+        records.append(
+            {
+                "id": _legacy_activity_uuid(
+                    project,
+                    "todo",
+                    position,
+                    full_text,
+                ),
+                "kind": "todo",
+                "title": title,
+                "body": body,
+                "url": "",
+                "completed": bool(todo.get("completed", False)),
+                "pinned": False,
+                "created_at": timestamp,
+                "updated_at": timestamp,
+            }
+        )
+
+    status_position = 0
 
     for line in _read_project_file_body(
         project,
@@ -502,34 +1016,119 @@ def _project_feed_items(
         if match is None:
             continue
 
-        items.append(
+        content = match.group("body")
+        title, body = _legacy_title_and_body(content)
+        timestamp = match.group("timestamp")
+        records.append(
             {
-                "type": "status",
-                "label": "Status",
-                "title": "Status update",
-                "body": match.group("body"),
-                "timestamp": match.group(
-                    "timestamp"
+                "id": _legacy_activity_uuid(
+                    project,
+                    "status",
+                    status_position,
+                    line,
                 ),
-                "source": "status.md",
-                "icon": "✓",
+                "kind": "status",
+                "title": title,
+                "body": body,
+                "url": "",
+                "completed": False,
+                "pinned": False,
+                "created_at": timestamp,
+                "updated_at": timestamp,
             }
         )
+        status_position += 1
 
-    for todo in todos[:10]:
+    return records
+
+
+def _ensure_project_store(project: str) -> Path:
+    root = project_root(project)
+    legacy_profile = _project_about(project)
+    legacy_settings = _project_config_values(project)
+
+    try:
+        qualifiers = load_project_settings(project)
+    except DuckSettingsError:
+        qualifiers = {}
+
+    profile = {
+        "what": (
+            ""
+            if legacy_profile.get("what", "") == "Not yet recorded."
+            else legacy_profile.get("what", "")
+        ),
+        "why": (
+            ""
+            if legacy_profile.get("why", "") == "Not yet recorded."
+            else legacy_profile.get("why", "")
+        ),
+        "class": str(qualifiers.get("class", "")),
+    }
+    all_settings = dict(legacy_settings)
+    all_settings.update(
+        {
+            key: str(value)
+            for key, value in qualifiers.items()
+        }
+    )
+    project_store.initialize_project(
+        root,
+        profile,
+        all_settings,
+    )
+
+    if project_store.meta_value(
+        root,
+        "legacy_activity_imported",
+    ) != "1":
+        project_store.import_activity(
+            root,
+            _legacy_activity_records(project),
+        )
+        project_store.set_meta(
+            root,
+            "legacy_activity_imported",
+            "1",
+        )
+
+    return root
+
+
+def _stored_feed_items(
+    root: Path,
+) -> list[dict[str, object]]:
+    presentations = {
+        "note": ("Note", "\u25a4"),
+        "todo": ("Todo", "\u2610"),
+        "status": ("Status", "\u2713"),
+        "link": ("Link", "\u2197"),
+        "file": ("File", "\u2315"),
+        "document": ("Document", "\u25b1"),
+        "check-in": ("Check-in", "\u25c9"),
+        "event": ("Event", "\u25c7"),
+    }
+    items: list[dict[str, object]] = []
+
+    for record in project_store.list_activity(root, limit=100):
+        kind = str(record["kind"])
+        label, icon = presentations.get(
+            kind,
+            (kind.title(), "\u2022"),
+        )
         items.append(
             {
-                "type": "todo",
-                "label": "Todo",
-                "title": (
-                    "Completed todo"
-                    if todo["completed"]
-                    else "Existing todo"
-                ),
-                "body": str(todo["title"]),
-                "timestamp": "",
-                "source": "inbox.md",
-                "icon": "☑" if todo["completed"] else "□",
+                "id": str(record["id"]),
+                "type": kind,
+                "label": label,
+                "title": str(record["title"]),
+                "body": str(record["body"]),
+                "timestamp": str(record["created_at"]),
+                "source": ".pocket/project.sqlite3",
+                "icon": icon,
+                "url": str(record["url"]),
+                "pinned": bool(record["pinned"]),
+                "completed": bool(record["completed"]),
             }
         )
 
@@ -539,30 +1138,44 @@ def _project_feed_items(
 def project_feed_context(
     project: str,
 ) -> dict[str, object]:
-    config = _project_config_values(project)
-    todos = _project_todos(project)
+    root = _ensure_project_store(project)
+    profile = project_store.project_profile(root)
+    settings = project_store.project_settings(root)
+    todos = project_store.open_todos(root, limit=3)
+    pinned = project_store.pinned_resources(root)
 
     return {
-        "project_about": _project_about(
-            project
-        ),
+        "project_about": {
+            "what": profile.get("what", ""),
+            "why": profile.get("why", ""),
+            "class": profile.get("class", ""),
+        },
         "quick_links": _project_quick_links(
             project,
-            config,
+            settings,
         ),
+        "pinned_resources": [
+            {
+                "id": str(resource["id"]),
+                "type": str(resource["kind"]),
+                "label": str(resource["title"]),
+                "url": str(resource["url"]),
+                "icon": (
+                    "\u2197"
+                    if resource["kind"] == "link"
+                    else "\u25b1"
+                ),
+            }
+            for resource in pinned
+        ],
         "top_todos": [
-            todo
+            {
+                "title": str(todo["title"]),
+            }
             for todo in todos
-            if not todo["completed"]
-        ][:3],
-        "feed_items": _project_feed_items(
-            project,
-            todos,
-        ),
-        "project_started": config.get(
-            "started",
-            "",
-        ),
+        ],
+        "feed_items": _stored_feed_items(root),
+        "project_started": settings.get("started", ""),
     }
 
 def _env_enabled(
@@ -624,9 +1237,13 @@ def duck_settings_context(
         system_settings = load_system_settings()
 
         if project:
-            project_qualifiers = (
-                load_project_settings(project)
+            stored_settings = project_store.project_settings(
+                _ensure_project_store(project)
             )
+            project_qualifiers = {
+                key: stored_settings.get(key, "")
+                for key in PROJECT_QUALIFIER_KEYS
+            }
             session_values = (
                 load_session_values(project)
             )
@@ -969,58 +1586,21 @@ def append_status_update(
             "update": "",
         }
 
-    try:
-        current = read_editable_markdown(
-            project,
-            "status.md",
-        )
-
-        body = str(
-            current["body"]
-        )
-
-        body = body.rstrip()
-
-        if body:
-            body += "\n\n"
-
-        try:
-            timezone = ZoneInfo(
-                os.environ.get(
-                    "POCKET_TIMEZONE",
-                    "America/New_York",
-                )
-            )
-        except Exception:
-            timezone = ZoneInfo("UTC")
-
-        timestamp = datetime.now(
-            timezone
-        ).strftime(
-            "%m/%d/%Y %I:%M %p"
-        )
-
-        body += (
-            f"- **{timestamp}** — "
-            f"{line}\n"
-        )
-
-        write_editable_markdown(
-            project,
-            "status.md",
-            frontmatter=str(
-                current["frontmatter"]
-            ),
-            body=body,
-            has_frontmatter=bool(
-                current["has_frontmatter"]
-            ),
-        )
-    except ProjectError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=str(exc),
-        ) from exc
+    timestamp = _quick_entry_timestamp()
+    project_store.create_activity(
+        _ensure_project_store(project),
+        {
+            "id": str(uuid4()),
+            "kind": "status",
+            "title": line,
+            "body": "",
+            "url": "",
+            "completed": False,
+            "pinned": False,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        },
+    )
 
     return {
         "saved": True,
@@ -1085,6 +1665,14 @@ def _format_quick_entry(
             detail="Entry cannot be empty",
         )
 
+    content = "\n".join(lines).strip()
+
+    if kind == "todo" and len(content) > 2000:
+        raise HTTPException(
+            status_code=400,
+            detail="Todos are limited to 2,000 characters",
+        )
+
     timestamp = _quick_entry_timestamp()
 
     if kind == "status":
@@ -1113,6 +1701,36 @@ def _format_quick_entry(
 
 
 @app.post(
+    "/api/projects/{project}/activity/{activity_id}/pin",
+)
+def set_activity_resource_pin(
+    project: str,
+    activity_id: str,
+    update: ActivityPinUpdate,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+    root = _ensure_project_store(project)
+    saved = project_store.set_pinned(
+        root,
+        activity_id,
+        update.pinned,
+        _quick_entry_timestamp(),
+    )
+
+    if not saved:
+        raise HTTPException(
+            status_code=404,
+            detail="Pinnable activity item not found",
+        )
+
+    return {
+        "saved": True,
+        "id": activity_id,
+        "pinned": update.pinned,
+    }
+
+
+@app.post(
     "/api/projects/{project}/quick-entry",
 )
 def add_quick_entry(
@@ -1122,58 +1740,135 @@ def add_quick_entry(
     ensure_project_configured(project)
 
     kind = entry.kind.strip().casefold()
+    title = entry.title.strip()
+    lines = _normalized_entry_lines(entry.text)
+    content = "\n".join(lines).strip()
 
-    if kind == "status":
-        file_label = "status.md"
-    elif kind == "todo":
-        file_label = "inbox.md"
-    else:
+    if kind not in {"note", "todo", "status", "link"}:
         raise HTTPException(
             status_code=400,
             detail="Unknown entry type",
         )
 
-    formatted = _format_quick_entry(
-        kind,
-        entry.text,
-    )
-
-    try:
-        current = read_editable_markdown(
-            project,
-            file_label,
-        )
-
-        body = str(
-            current["body"]
-        ).rstrip()
-
-        if body:
-            body += "\n\n"
-
-        body += formatted
-
-        write_editable_markdown(
-            project,
-            file_label,
-            frontmatter=str(
-                current["frontmatter"]
-            ),
-            body=body,
-            has_frontmatter=bool(
-                current["has_frontmatter"]
-            ),
-        )
-    except ProjectError as exc:
+    if not title:
         raise HTTPException(
-            status_code=404,
-            detail=str(exc),
-        ) from exc
+            status_code=400,
+            detail="A title is required",
+        )
+
+    if len(title) > 200:
+        raise HTTPException(
+            status_code=400,
+            detail="Titles are limited to 200 characters",
+        )
+
+    if kind in {"note", "link"} and not content:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "A link URL is required"
+                if kind == "link"
+                else "Note text is required"
+            ),
+        )
+
+    if kind in {"note", "todo"} and len(content) > 2000:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{kind.title()}s are limited to 2,000 characters",
+        )
+
+    url = ""
+
+    if kind == "link":
+        _label, url = _activity_entry_data(
+            kind,
+            content,
+        )
+        content = url
+
+    timestamp = _quick_entry_timestamp()
+    activity_id = str(uuid4())
+    root = _ensure_project_store(project)
+    project_store.create_activity(
+        root,
+        {
+            "id": activity_id,
+            "kind": kind,
+            "title": title,
+            "body": content,
+            "url": url,
+            "completed": False,
+            "pinned": False,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        },
+    )
 
     return {
         "saved": True,
+        "id": activity_id,
         "kind": kind,
-        "file": file_label,
+        "file": ".pocket/project.sqlite3",
+    }
+
+
+@app.delete(
+    "/api/projects/{project}/activity/{activity_id}",
+)
+def delete_activity_item(
+    project: str,
+    activity_id: str,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+    root = _ensure_project_store(project)
+    deleted = project_store.soft_delete(
+        root,
+        activity_id,
+        _quick_entry_timestamp(),
+    )
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail="Activity item not found",
+        )
+
+    return {
+        "saved": True,
+        "deleted": True,
+        "id": activity_id,
+    }
+
+
+@app.post(
+    "/api/projects/{project}/about",
+)
+def update_project_about(
+    project: str,
+    update: ProjectAboutUpdate,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+    root = _ensure_project_store(project)
+    profile = {
+        "what": update.what.strip(),
+        "why": update.why.strip(),
+        "class": update.class_name.strip(),
+    }
+    project_store.update_project_profile(
+        root,
+        profile,
+        _quick_entry_timestamp(),
+    )
+    project_store.update_project_settings(
+        root,
+        {"class": profile["class"]},
+        _quick_entry_timestamp(),
+    )
+
+    return {
+        "saved": True,
+        "profile": profile,
     }
 
 
@@ -1517,9 +2212,13 @@ def _duck_project_settings_context(
         load_system_settings()
     )
 
-    current_settings = (
-        load_project_settings(project)
+    stored_settings = project_store.project_settings(
+        _ensure_project_store(project)
     )
+    current_settings = {
+        key: stored_settings.get(key, "")
+        for key in PROJECT_QUALIFIER_KEYS
+    }
 
     project_fields: list[
         dict[str, object]
@@ -1638,23 +2337,21 @@ async def save_duck_project_settings(
         for key in PROJECT_QUALIFIER_KEYS
     }
 
-    try:
-        save_project_settings(
-            project,
-            values,
-        )
-    except DuckSettingsError as exc:
-        return templates.TemplateResponse(
-            request=request,
-            name="project_settings.html",
-            context=(
-                _duck_project_settings_context(
-                    request,
-                    project,
-                    error=str(exc),
-                )
-            ),
-            status_code=400,
+    root = _ensure_project_store(project)
+    timestamp = _quick_entry_timestamp()
+    project_store.update_project_settings(
+        root,
+        values,
+        timestamp,
+    )
+
+    if "class" in values:
+        profile = project_store.project_profile(root)
+        profile["class"] = values["class"]
+        project_store.update_project_profile(
+            root,
+            profile,
+            timestamp,
         )
 
     return RedirectResponse(

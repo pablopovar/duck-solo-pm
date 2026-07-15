@@ -54,7 +54,7 @@
           <h1>{{ project_title }}</h1>
 
           <p>
-            <span aria-hidden="true">â—</span>
+            <span aria-hidden="true">&#9679;</span>
             {{ project_qualifiers.get("status", "") or "Project" }}
           </p>
         </div>
@@ -69,27 +69,54 @@
         >↔</button>
       </header>
 
-      <section class="duck-context-card">
-        <h2>ⓘ About</h2>
+      <section class="duck-context-card duck-about-card">
+        <header class="duck-context-card-header">
+          <h2>ⓘ About</h2>
+          <button id="duck-about-edit" type="button">Edit</button>
+        </header>
 
-        <div class="duck-about-entry">
-          <h3>What this project is</h3>
-          <p>{{ project_about.what }}</p>
+        <div id="duck-about-display">
+          <div class="duck-about-entry">
+            <h3>What this project is</h3>
+            <p>{{ project_about.what or "Not yet recorded." }}</p>
+          </div>
+
+          <div class="duck-about-entry">
+            <h3>Why it exists</h3>
+            <p>{{ project_about.why or "Not yet recorded." }}</p>
+          </div>
+
+          <div class="duck-about-entry">
+            <h3>Class</h3>
+            <p>
+              <span class="duck-context-chip">
+                {{ project_about.class or "Not set" }}
+              </span>
+            </p>
+          </div>
         </div>
 
-        <div class="duck-about-entry">
-          <h3>Why it exists</h3>
-          <p>{{ project_about.why }}</p>
-        </div>
+        <form id="duck-about-form" hidden>
+          <label for="duck-about-what">What this project is</label>
+          <textarea id="duck-about-what" rows="3">{{ project_about.what }}</textarea>
 
-        <div class="duck-about-entry">
-          <h3>Class</h3>
-          <p>
-            <span class="duck-context-chip">
-              {{ project_qualifiers.get("class", "") or "Not set" }}
-            </span>
-          </p>
-        </div>
+          <label for="duck-about-why">Why it exists</label>
+          <textarea id="duck-about-why" rows="3">{{ project_about.why }}</textarea>
+
+          <label for="duck-about-class">Class</label>
+          <input
+            id="duck-about-class"
+            type="text"
+            value="{{ project_about.class }}"
+          >
+
+          <p id="duck-about-feedback" aria-live="polite"></p>
+
+          <div class="duck-about-form-actions">
+            <button id="duck-about-cancel" type="button">Cancel</button>
+            <button id="duck-about-save" type="submit">Save</button>
+          </div>
+        </form>
       </section>
 
       <section class="duck-context-card">
@@ -114,29 +141,64 @@
         </ul>
       </section>
 
-      <section class="duck-context-card duck-top-todos">
-        <h2>☑ Top 3 todos</h2>
+      <section class="duck-context-card duck-pinned-resources">
+        <h2>&#9733; Pinned resources</h2>
 
-        {% if top_todos %}
+        {% if pinned_resources %}
           <ul>
-            {% for todo in top_todos %}
+            {% for resource in pinned_resources %}
               <li>
-                <span class="duck-todo-box" aria-hidden="true"></span>
-                <span>{{ todo.title }}</span>
+                {% if resource.url %}
+                  <a
+                    href="{{ resource.url }}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <span aria-hidden="true">{{ resource.icon }}</span>
+                    <span>{{ resource.label }}</span>
+                    <span aria-hidden="true">&#8599;</span>
+                  </a>
+                {% else %}
+                  <span class="duck-pinned-resource-label">
+                    <span aria-hidden="true">{{ resource.icon }}</span>
+                    <span>{{ resource.label }}</span>
+                  </span>
+                {% endif %}
               </li>
             {% endfor %}
           </ul>
         {% else %}
           <p class="duck-context-empty">
-            No unchecked Markdown todos were found.
+            Pin a link or document from the activity feed.
           </p>
         {% endif %}
-
-        <a
-          class="duck-context-detail-link"
-          href="/project/{{ quote(project, safe='') }}/legacy"
-        >Open the legacy project dashboard</a>
       </section>
+
+      <details class="duck-context-card duck-top-todos" open>
+        <summary><h2>☑ Top 3 todos</h2></summary>
+
+        <div class="duck-top-todos-content">
+          {% if top_todos %}
+            <ul>
+              {% for todo in top_todos %}
+                <li>
+                  <span class="duck-todo-box" aria-hidden="true"></span>
+                  <span>{{ todo.title }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="duck-context-empty">
+              No unchecked todos were found.
+            </p>
+          {% endif %}
+
+          <a
+            class="duck-context-detail-link"
+            href="/project/{{ quote(project, safe='') }}/legacy"
+          >Open the legacy project dashboard</a>
+        </div>
+      </details>
 
       <footer class="duck-context-footer">
         {% if project_started %}
@@ -155,12 +217,36 @@
         </div>
 
         <div class="duck-feed-tools">
-          <button type="button" disabled>
-            All activity⌄
-          </button>
-          <button type="button" disabled>
-            ▽ Filter
-          </button>
+          <div
+            class="duck-density-control"
+            role="group"
+            aria-label="Interface density"
+          >
+            <button
+              id="duck-density-decrease"
+              type="button"
+              title="Decrease density"
+            >−</button>
+            <span id="duck-density-label">Standard</span>
+            <button
+              id="duck-density-increase"
+              type="button"
+              title="Increase density"
+            >+</button>
+          </div>
+
+          <label
+            class="duck-visually-hidden"
+            for="duck-feed-filter"
+          >Filter activity</label>
+
+          <select id="duck-feed-filter">
+            <option value="all">All activity</option>
+            <option value="note">Notes</option>
+            <option value="todo">Todos</option>
+            <option value="link">Links</option>
+            <option value="status">Statuses</option>
+          </select>
         </div>
       </header>
 
@@ -168,97 +254,201 @@
         <div class="duck-feed-list">
           {% if feed_items %}
             {% for item in feed_items %}
-              <article class="duck-feed-item duck-feed-item-{{ item.type }}">
+              <article
+                class="duck-feed-item duck-feed-item-{{ item.type }}"
+                data-feed-type="{{ item.type }}"
+              >
                 <div class="duck-feed-icon" aria-hidden="true">
                   {{ item.icon }}
                 </div>
 
-                <div class="duck-feed-card">
-                  <div class="duck-feed-card-main">
-                    <h2>{{ item.title }}</h2>
-                    <p>{{ item.body }}</p>
-
-                    <small>
-                      Existing record from {{ item.source }}
-                    </small>
-                  </div>
-
-                  <div class="duck-feed-card-meta">
-                    <span class="duck-feed-badge">
-                      {{ item.label }}
+                <details class="duck-feed-card">
+                  <summary class="duck-feed-summary">
+                    <span class="duck-feed-summary-main">
+                      <strong>{{ item.title }}</strong>
+                      <span class="duck-feed-preview">
+                        {{ item.body }}
+                      </span>
                     </span>
 
-                    {% if item.timestamp %}
-                      <time>{{ item.timestamp }}</time>
+                    <span class="duck-feed-card-meta">
+                      <span class="duck-feed-badge">
+                        {{ item.label }}
+                      </span>
+
+                      {% if item.timestamp %}
+                        <time>{{ item.timestamp }}</time>
+                      {% endif %}
+
+                      <span
+                        class="duck-feed-disclosure"
+                        aria-hidden="true"
+                      >⌄</span>
+                    </span>
+                  </summary>
+
+                  <div class="duck-feed-card-content">
+                    {% if item.get("url", "") %}
+                      <p class="duck-feed-body">
+                        <a
+                          href="{{ item.url }}"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >{{ item.title }}</a>
+                      </p>
+                    {% elif item.body %}
+                      <p class="duck-feed-body">{{ item.body }}</p>
                     {% endif %}
+
+                    <div class="duck-feed-card-actions">
+                      {% if item.type in ["link", "file", "document"] and item.get("id", "") %}
+                        <button
+                          type="button"
+                          data-pin-resource
+                          data-activity-id="{{ item.id }}"
+                          data-pinned="{{ 'true' if item.get('pinned', False) else 'false' }}"
+                          aria-pressed="{{ 'true' if item.get('pinned', False) else 'false' }}"
+                        >
+                          {% if item.get("pinned", False) %}
+                            Unpin from resources
+                          {% else %}
+                            Pin to resources
+                          {% endif %}
+                        </button>
+                      {% endif %}
+
+                      <button
+                        type="button"
+                        class="duck-delete-activity"
+                        data-delete-activity
+                        data-activity-id="{{ item.id }}"
+                        data-activity-title="{{ item.title }}"
+                      >Delete</button>
+                    </div>
                   </div>
-                </div>
+                </details>
               </article>
             {% endfor %}
+
+            <section
+              id="duck-filter-empty"
+              class="duck-feed-empty duck-filter-empty"
+              hidden
+            >
+              <div aria-hidden="true">⌁</div>
+              <h2>No matching activity</h2>
+              <p>Choose another activity type.</p>
+            </section>
           {% else %}
             <section class="duck-feed-empty">
-              <div aria-hidden="true">âŒ</div>
+              <div aria-hidden="true">&#8961;</div>
               <h2>No activity records yet</h2>
               <p>
-                This shell reads existing timestamped statuses
-                and Markdown todos. The structured activity store
-                comes in the next patch.
+                Use Add item to post a note, todo,
+                status update, or link.
               </p>
             </section>
           {% endif %}
         </div>
       </div>
 
-      <footer class="duck-composer-shell">
-        <div class="duck-composer-type">
-          <label for="duck-entry-type">Add:</label>
+      <button
+        id="duck-composer-launch"
+        class="duck-composer-launch"
+        type="button"
+        aria-controls="duck-composer-popover"
+        aria-expanded="false"
+      >＋ Add item</button>
 
-          <select id="duck-entry-type">
-            <option value="note">▤ Note</option>
-            <option value="todo">☑ Todo</option>
-            <option value="status">â— Status</option>
-            <option value="file">⌕ File</option>
-            <option value="link">↗ Link</option>
-            <option value="check-in">◉ Check-in</option>
-            <option value="event">◇ Event</option>
-          </select>
+      <div
+        id="duck-composer-backdrop"
+        class="duck-composer-backdrop"
+        hidden
+      ></div>
 
-          <div class="duck-composer-additions">
-            <button
-              type="button"
-              data-shell-action
-              title="Attachment persistence comes next"
-            >⌕</button>
+      <section
+        id="duck-composer-popover"
+        class="duck-composer-popover"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="duck-composer-title"
+        hidden
+      >
+        <header class="duck-composer-popover-header">
+          <h2 id="duck-composer-title">Add to project</h2>
 
-            <button
-              type="button"
-              data-shell-action
-              title="Additional fields come next"
-            >＋</button>
+          <button
+            id="duck-composer-close"
+            type="button"
+            aria-label="Close composer"
+          >×</button>
+        </header>
+
+        <div class="duck-composer-shell">
+          <div class="duck-composer-type">
+            <label for="duck-entry-type">Add:</label>
+
+            <select id="duck-entry-type">
+              <option value="note">▤ Note</option>
+              <option value="todo">☑ Todo</option>
+              <option value="status">&#9679; Status</option>
+              <option value="link">↗ Link</option>
+              <option value="file" disabled>⌕ File — later</option>
+              <option value="check-in" disabled>◉ Check-in — later</option>
+              <option value="event" disabled>◇ Event — later</option>
+            </select>
+
+            <div class="duck-composer-additions">
+              <button
+                type="button"
+                data-shell-action
+                title="Attachment persistence comes next"
+              >⌕</button>
+
+              <button
+                type="button"
+                data-shell-action
+                title="Additional fields come next"
+              >＋</button>
+            </div>
+          </div>
+
+          <div class="duck-composer-body">
+            <input
+              id="duck-entry-title"
+              type="text"
+              maxlength="200"
+              placeholder="Note title"
+              autocomplete="off"
+            >
+
+            <textarea
+              id="duck-composer-text"
+              rows="4"
+              placeholder="Write your note…"
+            ></textarea>
+
+            <div class="duck-composer-actions">
+              <p id="duck-composer-feedback" aria-live="polite">
+                Notes, todos, status updates, and links can be posted.
+              </p>
+
+              <span
+                id="duck-character-counter"
+                class="duck-character-counter"
+                aria-live="polite"
+              >2,000 characters left</span>
+
+              <span>Ctrl/⌘ + Enter</span>
+
+              <button
+                id="duck-composer-post"
+                type="button"
+              >Post</button>
+            </div>
           </div>
         </div>
-
-        <div class="duck-composer-body">
-          <textarea
-            id="duck-composer-text"
-            rows="4"
-            placeholder="Write your note…"
-          ></textarea>
-
-          <div class="duck-composer-actions">
-            <p id="duck-composer-feedback" aria-live="polite">
-              Composer preview; posting is enabled with the activity store.
-            </p>
-
-            <span>Ctrl/⌘ + Enter</span>
-
-            <button
-              id="duck-composer-post"
-              type="button"
-            >Post</button>
-          </div>
-        </div>
-      </footer>
+      </section>
     </section>
   </main>
 
