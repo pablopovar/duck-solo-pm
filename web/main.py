@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 from datetime import datetime
@@ -222,6 +223,347 @@ def project_title(project: str) -> str:
         project,
     )
 
+
+
+_MARKDOWN_TODO = re.compile(
+    r"^\s*[-*]\s+\[(?P<done>[ xX])\]\s+(?P<title>.+?)\s*$"
+)
+
+_STATUS_ACTIVITY = re.compile(
+    r"^\s*[-*]\s+\*\*(?P<timestamp>.+?)\*\*\s+[—-]\s+(?P<body>.+?)\s*$"
+)
+
+
+def _decoded_frontmatter_value(
+    frontmatter: str,
+    key: str,
+) -> str:
+    pattern = re.compile(
+        rf"^{re.escape(key)}:[ \t]*(.*)$",
+        re.MULTILINE,
+    )
+    match = pattern.search(frontmatter)
+
+    if match is None:
+        return ""
+
+    raw = match.group(1).strip()
+
+    if not raw:
+        return ""
+
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        value = raw
+
+        if (
+            len(value) >= 2
+            and value[0] == value[-1]
+            and value[0] in {'"', "'"}
+        ):
+            value = value[1:-1]
+
+    if value is None:
+        return ""
+
+    return str(value).strip()
+
+
+def _read_project_file_body(
+    project: str,
+    label: str,
+) -> str:
+    try:
+        document = read_editable_markdown(
+            project,
+            label,
+        )
+    except ProjectError:
+        return ""
+
+    return str(document["body"])
+
+
+def _project_config_values(
+    project: str,
+) -> dict[str, str]:
+    try:
+        document = read_editable_markdown(
+            project,
+            "config.md",
+        )
+    except ProjectError:
+        return {}
+
+    frontmatter = str(
+        document["frontmatter"]
+    )
+
+    keys = (
+        "project",
+        "canonical",
+        "url",
+        "chatgpt",
+        "local",
+        "repo",
+        "local_repo",
+        "started",
+    )
+
+    return {
+        key: _decoded_frontmatter_value(
+            frontmatter,
+            key,
+        )
+        for key in keys
+    }
+
+
+def _markdown_paragraphs(
+    source: str,
+    limit: int = 2,
+) -> list[str]:
+    paragraphs: list[str] = []
+    current: list[str] = []
+
+    def finish() -> None:
+        if not current:
+            return
+
+        text = " ".join(current).strip()
+        current.clear()
+
+        if text:
+            paragraphs.append(text)
+
+    for raw_line in source.splitlines():
+        line = raw_line.strip()
+
+        if not line:
+            finish()
+
+            if len(paragraphs) >= limit:
+                break
+
+            continue
+
+        if line.startswith(("#", "---")):
+            finish()
+            continue
+
+        if re.match(
+            r"^[-*]\s+",
+            line,
+        ):
+            finish()
+            continue
+
+        current.append(line)
+
+    if len(paragraphs) < limit:
+        finish()
+
+    return paragraphs[:limit]
+
+
+def _project_about(
+    project: str,
+) -> dict[str, str]:
+    paragraphs = _markdown_paragraphs(
+        _read_project_file_body(
+            project,
+            "manifesto.md",
+        )
+    )
+
+    return {
+        "what": (
+            paragraphs[0]
+            if paragraphs
+            else "Not yet recorded."
+        ),
+        "why": (
+            paragraphs[1]
+            if len(paragraphs) > 1
+            else "Not yet recorded."
+        ),
+    }
+
+
+def _project_todos(
+    project: str,
+) -> list[dict[str, object]]:
+    todos: list[dict[str, object]] = []
+
+    for line in _read_project_file_body(
+        project,
+        "inbox.md",
+    ).splitlines():
+        match = _MARKDOWN_TODO.match(line)
+
+        if match is None:
+            continue
+
+        todos.append(
+            {
+                "title": match.group("title"),
+                "completed": (
+                    match.group("done")
+                    .casefold()
+                    == "x"
+                ),
+            }
+        )
+
+    return todos
+
+
+def _project_quick_links(
+    project: str,
+    config: dict[str, str],
+) -> list[dict[str, object]]:
+    links: list[dict[str, object]] = []
+
+    def external(
+        label: str,
+        url: str,
+        icon: str,
+    ) -> None:
+        if not url.startswith(
+            ("https://", "http://")
+        ):
+            return
+
+        links.append(
+            {
+                "label": label,
+                "url": url,
+                "icon": icon,
+                "external": True,
+            }
+        )
+
+    external(
+        "ChatGPT",
+        config.get("chatgpt", ""),
+        "✺",
+    )
+
+    website = (
+        config.get("url", "")
+        or config.get("canonical", "")
+    )
+    external("Website", website, "◎")
+
+    repository = config.get("repo", "")
+    external("GitHub", repository, "◆")
+
+    if config.get("local_repo", ""):
+        links.append(
+            {
+                "label": "Local repo",
+                "url": (
+                    "pocket-open://local-repo"
+                    f"?project={quote(project, safe='')}"
+                ),
+                "icon": "⌘",
+                "external": False,
+            }
+        )
+
+    links.append(
+        {
+            "label": "Project folder",
+            "url": (
+                "pocket-open://folder"
+                f"?project={quote(project, safe='')}"
+            ),
+            "icon": "▱",
+            "external": False,
+        }
+    )
+
+    return links
+
+
+def _project_feed_items(
+    project: str,
+    todos: list[dict[str, object]],
+) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+
+    for line in _read_project_file_body(
+        project,
+        "status.md",
+    ).splitlines():
+        match = _STATUS_ACTIVITY.match(line)
+
+        if match is None:
+            continue
+
+        items.append(
+            {
+                "type": "status",
+                "label": "Status",
+                "title": "Status update",
+                "body": match.group("body"),
+                "timestamp": match.group(
+                    "timestamp"
+                ),
+                "source": "status.md",
+                "icon": "✓",
+            }
+        )
+
+    for todo in todos[:10]:
+        items.append(
+            {
+                "type": "todo",
+                "label": "Todo",
+                "title": (
+                    "Completed todo"
+                    if todo["completed"]
+                    else "Existing todo"
+                ),
+                "body": str(todo["title"]),
+                "timestamp": "",
+                "source": "inbox.md",
+                "icon": "☑" if todo["completed"] else "□",
+            }
+        )
+
+    return items
+
+
+def project_feed_context(
+    project: str,
+) -> dict[str, object]:
+    config = _project_config_values(project)
+    todos = _project_todos(project)
+
+    return {
+        "project_about": _project_about(
+            project
+        ),
+        "quick_links": _project_quick_links(
+            project,
+            config,
+        ),
+        "top_todos": [
+            todo
+            for todo in todos
+            if not todo["completed"]
+        ][:3],
+        "feed_items": _project_feed_items(
+            project,
+            todos,
+        ),
+        "project_started": config.get(
+            "started",
+            "",
+        ),
+    }
 
 def _env_enabled(
     name: str,
@@ -446,6 +788,52 @@ def open_project(
                 project=project,
                 state="missing_dashboard",
             ),
+        )
+
+    resources = read_project_resources(
+        project
+    )
+    page_context = context(
+        request,
+        project=project,
+        state="feed",
+        project_title=dashboard_project_title(
+            source,
+            project,
+        ),
+        github_url=resources[
+            "github_url"
+        ],
+        local_repo=resources[
+            "local_repo"
+        ],
+    )
+    page_context.update(
+        project_feed_context(project)
+    )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="project_feed.html",
+        context=page_context,
+    )
+
+
+@app.get(
+    "/project/{project}/legacy",
+    response_class=HTMLResponse,
+)
+def open_project_legacy(
+    request: Request,
+    project: str,
+) -> HTMLResponse:
+    ensure_project_configured(project)
+    source = read_dashboard(project)
+
+    if source is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Dashboard is missing",
         )
 
     resources = read_project_resources(

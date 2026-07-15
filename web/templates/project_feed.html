@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+  <title>Duck - {{ project_title }}</title>
+
+  <link
+    rel="stylesheet"
+    href="/static/project-feed.css"
+  >
+</head>
+
+<body
+  class="duck-feed-page"
+  data-project="{{ project }}"
+>
+  <header class="duck-feed-topbar">
+    <a class="duck-feed-brand" href="/">
+      <span aria-hidden="true">🦆</span>
+      <strong>Duck</strong>
+    </a>
+
+    <nav class="duck-feed-navigation">
+      <a
+        href="/project/{{ quote(project, safe='') }}/settings"
+      >⚙ Project Settings</a>
+
+      <span aria-hidden="true"></span>
+
+      <a href="/settings">♙ Settings</a>
+    </nav>
+  </header>
+
+  <main
+    id="duck-feed-layout"
+    class="duck-feed-layout"
+  >
+    <aside
+      id="duck-context-panel"
+      class="duck-context-panel"
+      aria-label="Project context"
+    >
+      <header class="duck-project-identity">
+        <div class="duck-project-mark" aria-hidden="true">
+          ◇
+        </div>
+
+        <div>
+          <h1>{{ project_title }}</h1>
+
+          <p>
+            <span aria-hidden="true">â—</span>
+            {{ project_qualifiers.get("status", "") or "Project" }}
+          </p>
+        </div>
+
+        <button
+          id="duck-context-toggle"
+          class="duck-context-toggle"
+          type="button"
+          aria-expanded="false"
+          aria-controls="duck-context-panel"
+          title="Expand project context"
+        >↔</button>
+      </header>
+
+      <section class="duck-context-card">
+        <h2>ⓘ About</h2>
+
+        <div class="duck-about-entry">
+          <h3>What this project is</h3>
+          <p>{{ project_about.what }}</p>
+        </div>
+
+        <div class="duck-about-entry">
+          <h3>Why it exists</h3>
+          <p>{{ project_about.why }}</p>
+        </div>
+
+        <div class="duck-about-entry">
+          <h3>Class</h3>
+          <p>
+            <span class="duck-context-chip">
+              {{ project_qualifiers.get("class", "") or "Not set" }}
+            </span>
+          </p>
+        </div>
+      </section>
+
+      <section class="duck-context-card">
+        <h2>↗ Quick links</h2>
+
+        <ul class="duck-quick-links">
+          {% for link in quick_links %}
+            <li>
+              <a
+                href="{{ link.url }}"
+                {% if link.external %}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                {% endif %}
+              >
+                <span aria-hidden="true">{{ link.icon }}</span>
+                <span>{{ link.label }}</span>
+                <span aria-hidden="true">↗</span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section class="duck-context-card duck-top-todos">
+        <h2>☑ Top 3 todos</h2>
+
+        {% if top_todos %}
+          <ul>
+            {% for todo in top_todos %}
+              <li>
+                <span class="duck-todo-box" aria-hidden="true"></span>
+                <span>{{ todo.title }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="duck-context-empty">
+            No unchecked Markdown todos were found.
+          </p>
+        {% endif %}
+
+        <a
+          class="duck-context-detail-link"
+          href="/project/{{ quote(project, safe='') }}/legacy"
+        >Open the legacy project dashboard</a>
+      </section>
+
+      <footer class="duck-context-footer">
+        {% if project_started %}
+          Created on {{ project_started }}
+        {% else %}
+          Filesystem-first project
+        {% endif %}
+      </footer>
+    </aside>
+
+    <section class="duck-activity-region">
+      <header class="duck-activity-header">
+        <div>
+          <h1>{{ project_title }}</h1>
+          <p>Project activity feed</p>
+        </div>
+
+        <div class="duck-feed-tools">
+          <button type="button" disabled>
+            All activity⌄
+          </button>
+          <button type="button" disabled>
+            ▽ Filter
+          </button>
+        </div>
+      </header>
+
+      <div class="duck-feed-scroll">
+        <div class="duck-feed-list">
+          {% if feed_items %}
+            {% for item in feed_items %}
+              <article class="duck-feed-item duck-feed-item-{{ item.type }}">
+                <div class="duck-feed-icon" aria-hidden="true">
+                  {{ item.icon }}
+                </div>
+
+                <div class="duck-feed-card">
+                  <div class="duck-feed-card-main">
+                    <h2>{{ item.title }}</h2>
+                    <p>{{ item.body }}</p>
+
+                    <small>
+                      Existing record from {{ item.source }}
+                    </small>
+                  </div>
+
+                  <div class="duck-feed-card-meta">
+                    <span class="duck-feed-badge">
+                      {{ item.label }}
+                    </span>
+
+                    {% if item.timestamp %}
+                      <time>{{ item.timestamp }}</time>
+                    {% endif %}
+                  </div>
+                </div>
+              </article>
+            {% endfor %}
+          {% else %}
+            <section class="duck-feed-empty">
+              <div aria-hidden="true">âŒ</div>
+              <h2>No activity records yet</h2>
+              <p>
+                This shell reads existing timestamped statuses
+                and Markdown todos. The structured activity store
+                comes in the next patch.
+              </p>
+            </section>
+          {% endif %}
+        </div>
+      </div>
+
+      <footer class="duck-composer-shell">
+        <div class="duck-composer-type">
+          <label for="duck-entry-type">Add:</label>
+
+          <select id="duck-entry-type">
+            <option value="note">▤ Note</option>
+            <option value="todo">☑ Todo</option>
+            <option value="status">â— Status</option>
+            <option value="file">⌕ File</option>
+            <option value="link">↗ Link</option>
+            <option value="check-in">◉ Check-in</option>
+            <option value="event">◇ Event</option>
+          </select>
+
+          <div class="duck-composer-additions">
+            <button
+              type="button"
+              data-shell-action
+              title="Attachment persistence comes next"
+            >⌕</button>
+
+            <button
+              type="button"
+              data-shell-action
+              title="Additional fields come next"
+            >＋</button>
+          </div>
+        </div>
+
+        <div class="duck-composer-body">
+          <textarea
+            id="duck-composer-text"
+            rows="4"
+            placeholder="Write your note…"
+          ></textarea>
+
+          <div class="duck-composer-actions">
+            <p id="duck-composer-feedback" aria-live="polite">
+              Composer preview; posting is enabled with the activity store.
+            </p>
+
+            <span>Ctrl/⌘ + Enter</span>
+
+            <button
+              id="duck-composer-post"
+              type="button"
+            >Post</button>
+          </div>
+        </div>
+      </footer>
+    </section>
+  </main>
+
+  <script src="/static/project-feed.js"></script>
+</body>
+</html>
