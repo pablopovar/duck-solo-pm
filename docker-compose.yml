@@ -21,6 +21,14 @@ services:
       DUCK_PERIODIC_REMINDER_MINUTES: "${DUCK_PERIODIC_REMINDER_MINUTES:-60}"
       DUCK_PERIODIC_REMINDER_MESSAGE: "${DUCK_PERIODIC_REMINDER_MESSAGE:-Time to update the status.}"
 
+      DUCK_MODEL_BASE_URL: "${DUCK_MODEL_BASE_URL:-http://host.docker.internal:11434/v1}"
+      DUCK_MODEL_NAME: "${DUCK_MODEL_NAME:-}"
+      DUCK_MODEL_API_KEY: "${DUCK_MODEL_API_KEY:-}"
+      DUCK_MODEL_TIMEOUT_SECONDS: "${DUCK_MODEL_TIMEOUT_SECONDS:-300}"
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     volumes:
       - type: bind
         source: "${POCKET_PROJECTS_PATH}"

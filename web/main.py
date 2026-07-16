@@ -48,7 +48,7 @@ from app.engine.projects import (
     touch_project,
     write_editable_markdown,
 )
-from app.engine import project_store
+from app.engine import project_chat, project_store
 
 
 WEB_DIR = Path(__file__).resolve().parent
@@ -119,6 +119,24 @@ class ProjectAboutUpdate(BaseModel):
     what: str = ""
     why: str = ""
     class_name: str = ""
+
+
+class ProjectChatRequest(BaseModel):
+    message: str = ""
+    model: str = ""
+
+
+def _chat_message_payload(
+    message: dict[str, object],
+) -> dict[str, object]:
+    payload = dict(message)
+
+    if str(message.get("role", "")) == "assistant":
+        payload["html"] = markdown.render(
+            str(message.get("content", ""))
+        )
+
+    return payload
 
 
 # DUCK SETTINGS SUBSYSTEM
@@ -1869,6 +1887,145 @@ def update_project_about(
     return {
         "saved": True,
         "profile": profile,
+    }
+
+
+@app.get(
+    "/api/projects/{project}/chat/models",
+)
+def project_chat_models(
+    project: str,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+
+    try:
+        models = project_chat.available_models()
+    except project_chat.ModelServiceError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=str(exc),
+        ) from exc
+
+    configured = project_chat.configured_model()
+
+    if configured and configured not in models:
+        models.insert(0, configured)
+
+    return {
+        "models": models,
+        "default": configured or (models[0] if models else ""),
+    }
+
+
+@app.get(
+    "/api/projects/{project}/chat/messages",
+)
+def project_chat_messages(
+    project: str,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+    root = _ensure_project_store(project)
+
+    return {
+        "messages": [
+            _chat_message_payload(message)
+            for message in project_store.list_chat_messages(
+                root,
+                limit=100,
+            )
+        ],
+    }
+
+
+@app.post(
+    "/api/projects/{project}/chat/messages",
+)
+def send_project_chat_message(
+    project: str,
+    request: ProjectChatRequest,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+    message = request.message.strip()
+    model = request.model.strip() or project_chat.configured_model()
+
+    if not message:
+        raise HTTPException(
+            status_code=400,
+            detail="Enter a message",
+        )
+
+    if len(message) > 12_000:
+        raise HTTPException(
+            status_code=400,
+            detail="Messages are limited to 12,000 characters",
+        )
+
+    root = _ensure_project_store(project)
+
+    try:
+        history = project_store.list_chat_messages(
+            root,
+            limit=23,
+        )
+        history.append(
+            {
+                "role": "user",
+                "content": message,
+            }
+        )
+        chat_result = project_chat.complete_project_chat(
+            model,
+            history,
+            root,
+        )
+    except project_chat.ModelServiceError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=str(exc),
+        ) from exc
+
+    timestamp = _quick_entry_timestamp()
+    user_message = {
+        "id": str(uuid4()),
+        "role": "user",
+        "content": message,
+        "model": model,
+        "created_at": timestamp,
+    }
+    assistant_message = {
+        "id": str(uuid4()),
+        "role": "assistant",
+        "content": chat_result.content,
+        "model": model,
+        "created_at": timestamp,
+    }
+    project_store.add_chat_message(root, user_message)
+    project_store.add_chat_message(root, assistant_message)
+
+    return {
+        "user_message": _chat_message_payload(user_message),
+        "assistant_message": _chat_message_payload(assistant_message),
+        "context": {
+            "available_files": chat_result.available_files,
+            "skipped_files": chat_result.skipped_files,
+            "readable_characters": chat_result.readable_characters,
+            "tool_calls": chat_result.tool_calls,
+            "accessed_files": list(chat_result.accessed_files),
+        },
+    }
+
+
+@app.delete(
+    "/api/projects/{project}/chat/messages",
+)
+def clear_project_chat(
+    project: str,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+    root = _ensure_project_store(project)
+
+    return {
+        "deleted": project_store.clear_chat_messages(root),
     }
 
 

@@ -11,6 +11,8 @@ backups/
 # Temporary files
 tmp.sh
 temp.sh
+*.patch.*
+*.patch
 *.PBAK.*
 *.zip
 *.tgz

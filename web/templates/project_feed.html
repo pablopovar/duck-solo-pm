@@ -42,9 +42,39 @@
   >
     <aside
       id="duck-context-panel"
-      class="duck-context-panel"
+      class="duck-context-panel duck-workspace-column"
+      data-duck-column="context"
+      data-column-state="normal"
       aria-label="Project context"
     >
+      <nav class="duck-column-chrome" aria-label="Project column controls">
+        <button
+          class="duck-column-drag"
+          type="button"
+          draggable="true"
+          aria-label="Drag Project column"
+          title="Drag to reorder Project column"
+        >::</button>
+        <button
+          class="duck-column-focus"
+          type="button"
+          data-column-action="expand"
+          title="Bring Project to front"
+        >Project</button>
+        <span class="duck-column-state-controls">
+          <button type="button" data-column-action="collapse" title="Collapse Project" aria-label="Collapse Project">-</button>
+          <button type="button" data-column-action="normal" title="Make all columns equal" aria-label="Make all columns equal">=</button>
+          <button type="button" data-column-action="expand" title="Focus Project" aria-label="Focus Project">+</button>
+        </span>
+        <button
+          class="duck-column-stack-drag"
+          type="button"
+          draggable="true"
+          aria-label="Drag collapsed column stack"
+          title="Drag this collapsed stack"
+        >S</button>
+      </nav>
+
       <header class="duck-project-identity">
         <div class="duck-project-mark" aria-hidden="true">
           ◇
@@ -209,7 +239,41 @@
       </footer>
     </aside>
 
-    <section class="duck-activity-region">
+    <section
+      id="duck-activity-panel"
+      class="duck-activity-region duck-workspace-column"
+      data-duck-column="activity"
+      data-column-state="expanded"
+      aria-label="Project activity"
+    >
+      <nav class="duck-column-chrome" aria-label="Activity column controls">
+        <button
+          class="duck-column-drag"
+          type="button"
+          draggable="true"
+          aria-label="Drag Activity column"
+          title="Drag to reorder Activity column"
+        >::</button>
+        <button
+          class="duck-column-focus"
+          type="button"
+          data-column-action="expand"
+          title="Bring Activity to front"
+        >Activity</button>
+        <span class="duck-column-state-controls">
+          <button type="button" data-column-action="collapse" title="Collapse Activity" aria-label="Collapse Activity">-</button>
+          <button type="button" data-column-action="normal" title="Make all columns equal" aria-label="Make all columns equal">=</button>
+          <button type="button" data-column-action="expand" title="Focus Activity" aria-label="Focus Activity">+</button>
+        </span>
+        <button
+          class="duck-column-stack-drag"
+          type="button"
+          draggable="true"
+          aria-label="Drag collapsed column stack"
+          title="Drag this collapsed stack"
+        >S</button>
+      </nav>
+
       <header class="duck-activity-header">
         <div>
           <h1>{{ project_title }}</h1>
@@ -247,6 +311,14 @@
             <option value="link">Links</option>
             <option value="status">Statuses</option>
           </select>
+
+          <button
+            id="duck-chat-toggle"
+            class="duck-chat-toggle"
+            type="button"
+            aria-controls="duck-chat-panel"
+            aria-expanded="false"
+          >Ask project</button>
         </div>
       </header>
 
@@ -450,6 +522,91 @@
         </div>
       </section>
     </section>
+
+    <aside
+      id="duck-chat-panel"
+      class="duck-chat-panel duck-workspace-column"
+      data-duck-column="chat"
+      data-column-state="collapsed"
+      aria-label="Project chat"
+    >
+      <nav class="duck-column-chrome" aria-label="Chat column controls">
+        <button
+          class="duck-column-drag"
+          type="button"
+          draggable="true"
+          aria-label="Drag Chat column"
+          title="Drag to reorder Chat column"
+        >::</button>
+        <button
+          class="duck-column-focus"
+          type="button"
+          data-column-action="expand"
+          title="Bring Chat to front"
+        >Chat</button>
+        <span class="duck-column-state-controls">
+          <button type="button" data-column-action="collapse" title="Collapse Chat" aria-label="Collapse Chat">-</button>
+          <button type="button" data-column-action="normal" title="Make all columns equal" aria-label="Make all columns equal">=</button>
+          <button type="button" data-column-action="expand" title="Focus Chat" aria-label="Focus Chat">+</button>
+        </span>
+        <button
+          class="duck-column-stack-drag"
+          type="button"
+          draggable="true"
+          aria-label="Drag collapsed column stack"
+          title="Drag this collapsed stack"
+        >S</button>
+      </nav>
+
+      <header class="duck-chat-header">
+        <div>
+          <strong>Ask this project</strong>
+          <span>Can search and read every readable project file.</span>
+        </div>
+
+        <button
+          id="duck-chat-close"
+          type="button"
+          aria-label="Close project chat"
+        >x</button>
+      </header>
+
+      <div class="duck-chat-toolbar">
+        <label for="duck-chat-model">Model</label>
+        <select id="duck-chat-model" disabled>
+          <option value="">Loading models...</option>
+        </select>
+
+        <button id="duck-chat-clear" type="button">Clear</button>
+      </div>
+
+      <div
+        id="duck-chat-messages"
+        class="duck-chat-messages"
+        aria-live="polite"
+      >
+        <p class="duck-chat-empty">
+          Ask about any document, decision, todo, note, or project file.
+        </p>
+      </div>
+
+      <form id="duck-chat-form" class="duck-chat-form">
+        <label class="duck-visually-hidden" for="duck-chat-input">
+          Message
+        </label>
+        <textarea
+          id="duck-chat-input"
+          rows="4"
+          maxlength="12000"
+          placeholder="Ask the project..."
+        ></textarea>
+
+        <div class="duck-chat-submit-row">
+          <span id="duck-chat-status" aria-live="polite"></span>
+          <button id="duck-chat-send" type="submit">Send</button>
+        </div>
+      </form>
+    </aside>
   </main>
 
   <script src="/static/project-feed.js"></script>

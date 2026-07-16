@@ -5,6 +5,9 @@
   const panel = document.getElementById(
     'duck-context-panel'
   );
+  const activityPanel = document.getElementById(
+    'duck-activity-panel'
+  );
   const toggle = document.getElementById(
     'duck-context-toggle'
   );
@@ -70,15 +73,35 @@
   const densityLabel = document.getElementById(
     'duck-density-label'
   );
+  const chatToggle = document.getElementById('duck-chat-toggle');
+  const chatPanel = document.getElementById('duck-chat-panel');
+  const chatClose = document.getElementById('duck-chat-close');
+  const chatModel = document.getElementById('duck-chat-model');
+  const chatClear = document.getElementById('duck-chat-clear');
+  const chatMessages = document.getElementById('duck-chat-messages');
+  const chatForm = document.getElementById('duck-chat-form');
+  const chatInput = document.getElementById('duck-chat-input');
+  const chatSend = document.getElementById('duck-chat-send');
+  const chatStatus = document.getElementById('duck-chat-status');
+  const workspaceColumns = Array.from(
+    document.querySelectorAll('[data-duck-column]')
+  );
 
-  if (!layout || !panel || !toggle) {
+  if (
+    !layout
+    || !panel
+    || !activityPanel
+    || !chatPanel
+    || !toggle
+    || workspaceColumns.length < 3
+  ) {
     return;
   }
 
   const project = document.body.dataset.project || '';
-  const storageKey = `duck.context.expanded.${project}`;
   const filterStorageKey = `duck.feed.filter.${project}`;
   const densityStorageKey = 'duck.ui.density';
+  const columnStorageKey = `duck.columns.${project}`;
   const densityLevels = ['spacious', 'standard', 'compact'];
   const densityLabels = {
     spacious: 'Spacious',
@@ -87,6 +110,8 @@
   };
 
   let density = 'standard';
+  let chatLoaded = false;
+  let chatLoading = false;
 
   try {
     const savedDensity = localStorage.getItem(densityStorageKey);
@@ -140,56 +165,679 @@
     });
   }
 
-  function setExpanded(expanded) {
-    layout.classList.toggle(
-      'context-expanded',
-      expanded
+  const columnIds = new Set(
+    workspaceColumns.map((column) => column.dataset.duckColumn)
+  );
+  let draggedColumnIds = [];
+
+  function orderedColumns() {
+    return Array.from(layout.children).filter(
+      (element) => element.matches('[data-duck-column]')
     );
-    toggle.setAttribute(
-      'aria-expanded',
-      String(expanded)
+  }
+
+  function columnById(columnId) {
+    return workspaceColumns.find(
+      (column) => column.dataset.duckColumn === columnId
     );
-    toggle.title = expanded
-      ? 'Collapse project context'
-      : 'Expand project context';
+  }
+
+  function validColumnState(state) {
+    return ['collapsed', 'normal', 'expanded'].includes(state);
+  }
+
+  function saveColumnLayout() {
+    const columns = orderedColumns();
+    const layoutState = {
+      order: columns.map((column) => column.dataset.duckColumn),
+      states: Object.fromEntries(
+        columns.map((column) => [
+          column.dataset.duckColumn,
+          column.dataset.columnState,
+        ])
+      ),
+    };
 
     try {
-      sessionStorage.setItem(
-        storageKey,
-        expanded ? '1' : '0'
-      );
+      localStorage.setItem(columnStorageKey, JSON.stringify(layoutState));
     } catch (_error) {
-      // The layout still works when storage is unavailable.
+      // Column controls still work without browser storage.
     }
   }
 
-  try {
-    setExpanded(
-      sessionStorage.getItem(storageKey) === '1'
-    );
-  } catch (_error) {
-    setExpanded(false);
+  function updateCollapsedStacks() {
+    const columns = orderedColumns();
+
+    for (const column of columns) {
+      delete column.dataset.inCollapsedStack;
+      delete column.dataset.stackLeader;
+      delete column.dataset.stackSize;
+    }
+
+    let index = 0;
+
+    while (index < columns.length) {
+      if (columns[index].dataset.columnState !== 'collapsed') {
+        index += 1;
+        continue;
+      }
+
+      const stack = [];
+
+      while (
+        index < columns.length
+        && columns[index].dataset.columnState === 'collapsed'
+      ) {
+        stack.push(columns[index]);
+        index += 1;
+      }
+
+      if (stack.length < 2) {
+        continue;
+      }
+
+      for (const column of stack) {
+        column.dataset.inCollapsedStack = 'true';
+        column.dataset.stackSize = String(stack.length);
+      }
+
+      stack[0].dataset.stackLeader = 'true';
+      const stackHandle = stack[0].querySelector(
+        '.duck-column-stack-drag'
+      );
+
+      if (stackHandle) {
+        stackHandle.textContent = `S${stack.length}`;
+      }
+    }
   }
 
-  toggle.addEventListener('click', (event) => {
-    event.stopPropagation();
-    setExpanded(
-      !layout.classList.contains('context-expanded')
-    );
-  });
+  function syncColumnInterface() {
+    updateCollapsedStacks();
+    const chatState = chatPanel.dataset.columnState;
 
-  panel.addEventListener('click', (event) => {
+    toggle.setAttribute(
+      'aria-expanded',
+      String(panel.dataset.columnState === 'expanded')
+    );
+    toggle.title = panel.dataset.columnState === 'expanded'
+      ? 'Make all columns equal'
+      : 'Bring Project to front';
+
+    if (chatToggle) {
+      chatToggle.setAttribute(
+        'aria-expanded',
+        String(chatState !== 'collapsed')
+      );
+      chatToggle.textContent = chatState === 'expanded'
+        ? 'Chat focused'
+        : 'Ask project';
+    }
+
+    if (chatState !== 'collapsed') {
+      loadChat();
+    }
+  }
+
+  function applyColumnStates(states, persist = true) {
+    for (const column of workspaceColumns) {
+      const columnId = column.dataset.duckColumn;
+      const nextState = states[columnId];
+
+      if (validColumnState(nextState)) {
+        column.dataset.columnState = nextState;
+      }
+    }
+
+    const expanded = workspaceColumns.filter(
+      (column) => column.dataset.columnState === 'expanded'
+    );
+
+    if (expanded.length > 1) {
+      expanded.slice(1).forEach((column) => {
+        column.dataset.columnState = 'collapsed';
+      });
+    }
+
     if (
-      event.target.closest(
-        'a, button, input, select, textarea, label, summary, form'
+      workspaceColumns.every(
+        (column) => column.dataset.columnState === 'collapsed'
       )
+    ) {
+      activityPanel.dataset.columnState = 'expanded';
+    }
+
+    syncColumnInterface();
+
+    if (persist) {
+      saveColumnLayout();
+    }
+  }
+
+  function focusColumn(columnId) {
+    const selected = columnById(columnId);
+
+    if (!selected) {
+      return;
+    }
+
+    const states = {};
+
+    for (const column of workspaceColumns) {
+      states[column.dataset.duckColumn] =
+        column === selected ? 'expanded' : 'collapsed';
+    }
+
+    applyColumnStates(states);
+
+    const focusTarget = selected.querySelector(
+      'textarea, input, select, button:not(.duck-column-drag)'
+    );
+
+    window.setTimeout(() => focusTarget && focusTarget.focus(), 0);
+  }
+
+  function normalizeColumns() {
+    const states = Object.fromEntries(
+      workspaceColumns.map((column) => [
+        column.dataset.duckColumn,
+        'normal',
+      ])
+    );
+    applyColumnStates(states);
+  }
+
+  function collapseColumn(columnId) {
+    const selected = columnById(columnId);
+
+    if (!selected) {
+      return;
+    }
+
+    selected.dataset.columnState = 'collapsed';
+
+    if (
+      workspaceColumns.every(
+        (column) => column.dataset.columnState === 'collapsed'
+      )
+    ) {
+      const fallback = orderedColumns().find(
+        (column) => column !== selected
+      ) || activityPanel;
+      fallback.dataset.columnState = 'expanded';
+    }
+
+    syncColumnInterface();
+    saveColumnLayout();
+  }
+
+  function restoreColumnLayout() {
+    let saved = null;
+
+    try {
+      saved = JSON.parse(localStorage.getItem(columnStorageKey) || 'null');
+    } catch (_error) {
+      saved = null;
+    }
+
+    if (saved && Array.isArray(saved.order)) {
+      const restoredOrder = saved.order.filter(
+        (columnId) => columnIds.has(columnId)
+      );
+
+      for (const columnId of columnIds) {
+        if (!restoredOrder.includes(columnId)) {
+          restoredOrder.push(columnId);
+        }
+      }
+
+      for (const columnId of restoredOrder) {
+        layout.append(columnById(columnId));
+      }
+    }
+
+    applyColumnStates(
+      saved && saved.states ? saved.states : {
+        context: 'normal',
+        activity: 'expanded',
+        chat: 'collapsed',
+      },
+      false
+    );
+  }
+
+  function collapsedStackFor(column) {
+    const columns = orderedColumns();
+    const position = columns.indexOf(column);
+
+    if (position < 0 || column.dataset.columnState !== 'collapsed') {
+      return [column];
+    }
+
+    let start = position;
+    let end = position;
+
+    while (
+      start > 0
+      && columns[start - 1].dataset.columnState === 'collapsed'
+    ) {
+      start -= 1;
+    }
+
+    while (
+      end + 1 < columns.length
+      && columns[end + 1].dataset.columnState === 'collapsed'
+    ) {
+      end += 1;
+    }
+
+    return columns.slice(start, end + 1);
+  }
+
+  function beginColumnDrag(event, column, asStack) {
+    draggedColumnIds = (
+      asStack ? collapsedStackFor(column) : [column]
+    ).map((item) => item.dataset.duckColumn);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData(
+      'text/plain',
+      draggedColumnIds.join(',')
+    );
+    layout.classList.add('duck-column-dragging');
+
+    for (const columnId of draggedColumnIds) {
+      columnById(columnId).classList.add('is-dragging');
+    }
+  }
+
+  function finishColumnDrag() {
+    draggedColumnIds = [];
+    layout.classList.remove('duck-column-dragging');
+
+    for (const column of workspaceColumns) {
+      column.classList.remove(
+        'is-dragging',
+        'is-drop-before',
+        'is-drop-after'
+      );
+    }
+  }
+
+  for (const column of workspaceColumns) {
+    column.querySelectorAll('[data-column-action]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const action = button.dataset.columnAction;
+        const columnId = column.dataset.duckColumn;
+
+        if (action === 'expand') {
+          focusColumn(columnId);
+        } else if (action === 'normal') {
+          normalizeColumns();
+        } else if (action === 'collapse') {
+          collapseColumn(columnId);
+        }
+      });
+    });
+
+    const dragHandle = column.querySelector('.duck-column-drag');
+    const stackHandle = column.querySelector('.duck-column-stack-drag');
+
+    if (dragHandle) {
+      dragHandle.addEventListener(
+        'dragstart',
+        (event) => beginColumnDrag(event, column, false)
+      );
+      dragHandle.addEventListener('dragend', finishColumnDrag);
+    }
+
+    if (stackHandle) {
+      stackHandle.addEventListener(
+        'dragstart',
+        (event) => beginColumnDrag(event, column, true)
+      );
+      stackHandle.addEventListener('dragend', finishColumnDrag);
+    }
+
+    column.addEventListener('dragover', (event) => {
+      if (
+        !draggedColumnIds.length
+        || draggedColumnIds.includes(column.dataset.duckColumn)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      const rectangle = column.getBoundingClientRect();
+      const before = event.clientX < rectangle.left + rectangle.width / 2;
+      column.classList.toggle('is-drop-before', before);
+      column.classList.toggle('is-drop-after', !before);
+    });
+
+    column.addEventListener('dragleave', () => {
+      column.classList.remove('is-drop-before', 'is-drop-after');
+    });
+
+    column.addEventListener('drop', (event) => {
+      if (
+        !draggedColumnIds.length
+        || draggedColumnIds.includes(column.dataset.duckColumn)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      const moving = draggedColumnIds.map(columnById).filter(Boolean);
+      const rectangle = column.getBoundingClientRect();
+      const before = event.clientX < rectangle.left + rectangle.width / 2;
+
+      if (before) {
+        column.before(...moving);
+      } else {
+        column.after(...moving);
+      }
+
+      finishColumnDrag();
+      updateCollapsedStacks();
+      saveColumnLayout();
+    });
+  }
+
+  restoreColumnLayout();
+
+  function setChatStatus(message, isError = false) {
+    if (!chatStatus) {
+      return;
+    }
+
+    chatStatus.textContent = message;
+    chatStatus.classList.toggle('is-error', isError);
+  }
+
+  function createChatMessage(message) {
+    const article = document.createElement('article');
+    const role = message.role === 'assistant' ? 'Duck' : 'You';
+    article.className = `duck-chat-message duck-chat-message-${
+      message.role === 'assistant' ? 'assistant' : 'user'
+    }`;
+
+    const label = document.createElement('strong');
+    label.textContent = role;
+
+    const content = document.createElement('div');
+    if (message.role === 'assistant' && message.html) {
+      content.innerHTML = message.html;
+    } else {
+      content.textContent = message.content || '';
+    }
+
+    article.append(label, content);
+    return article;
+  }
+
+  function renderChatMessages(messages) {
+    if (!chatMessages) {
+      return;
+    }
+
+    chatMessages.replaceChildren();
+
+    if (!messages.length) {
+      const empty = document.createElement('p');
+      empty.className = 'duck-chat-empty';
+      empty.textContent =
+        'Ask about any document, decision, todo, note, or project file.';
+      chatMessages.append(empty);
+      return;
+    }
+
+    for (const message of messages) {
+      chatMessages.append(createChatMessage(message));
+    }
+
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  async function responseJson(response) {
+    try {
+      return await response.json();
+    } catch (_error) {
+      return {};
+    }
+  }
+
+  async function loadChat() {
+    if (chatLoaded || chatLoading || !project) {
+      return;
+    }
+
+    chatLoading = true;
+    setChatStatus('Loading project chat...');
+
+    try {
+      const messagesResponse = await fetch(
+        `/api/projects/${encodeURIComponent(project)}/chat/messages`
+      );
+      const messagesResult = await responseJson(messagesResponse);
+
+      if (!messagesResponse.ok) {
+        throw new Error(
+          messagesResult.detail || 'Could not load project chat.'
+        );
+      }
+
+      renderChatMessages(messagesResult.messages || []);
+
+      const modelsResponse = await fetch(
+        `/api/projects/${encodeURIComponent(project)}/chat/models`
+      );
+      const modelsResult = await responseJson(modelsResponse);
+
+      if (!modelsResponse.ok) {
+        throw new Error(
+          modelsResult.detail || 'Could not load models.'
+        );
+      }
+
+      if (chatModel) {
+        chatModel.replaceChildren();
+
+        for (const model of modelsResult.models || []) {
+          const option = document.createElement('option');
+          option.value = model;
+          option.textContent = model;
+          chatModel.append(option);
+        }
+
+        chatModel.value = modelsResult.default || '';
+        chatModel.disabled = chatModel.options.length === 0;
+      }
+
+      if (!chatModel || chatModel.disabled) {
+        throw new Error('The model endpoint returned no models.');
+      }
+
+      chatLoaded = true;
+      setChatStatus('Ready');
+    } catch (error) {
+      setChatStatus(
+        error instanceof Error
+          ? error.message
+          : 'Could not load project chat.',
+        true
+      );
+    } finally {
+      chatLoading = false;
+    }
+  }
+
+  function setChatOpen(open) {
+    if (!chatPanel || !chatToggle) {
+      return;
+    }
+
+    if (open) {
+      focusColumn('chat');
+      window.setTimeout(() => chatInput && chatInput.focus(), 0);
+    } else {
+      collapseColumn('chat');
+      focusColumn('activity');
+    }
+  }
+
+  if (chatToggle) {
+    chatToggle.addEventListener('click', () => {
+      setChatOpen(chatPanel.dataset.columnState !== 'expanded');
+    });
+  }
+
+  if (chatClose) {
+    chatClose.addEventListener('click', () => setChatOpen(false));
+  }
+
+  async function submitChatMessage() {
+    if (
+      !chatInput
+      || !chatModel
+      || !chatSend
+      || !project
     ) {
       return;
     }
 
-    setExpanded(
-      !layout.classList.contains('context-expanded')
-    );
+    const message = chatInput.value.trim();
+
+    if (!message) {
+      setChatStatus('Enter a message.', true);
+      chatInput.focus();
+      return;
+    }
+
+    if (!chatModel.value) {
+      setChatStatus('Choose a model.', true);
+      return;
+    }
+
+    chatSend.disabled = true;
+    chatModel.disabled = true;
+    setChatStatus('The model is searching and reading the project...');
+
+    try {
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(project)}/chat/messages`,
+        {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            message,
+            model: chatModel.value,
+          }),
+        }
+      );
+      const result = await responseJson(response);
+
+      if (!response.ok) {
+        throw new Error(result.detail || 'The model request failed.');
+      }
+
+      if (chatMessages) {
+        const empty = chatMessages.querySelector('.duck-chat-empty');
+        if (empty) {
+          empty.remove();
+        }
+        chatMessages.append(
+          createChatMessage(result.user_message),
+          createChatMessage(result.assistant_message)
+        );
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+
+      chatInput.value = '';
+      const context = result.context || {};
+      const accessed = Array.isArray(context.accessed_files)
+        ? context.accessed_files.length
+        : 0;
+      setChatStatus(
+        `${accessed} file${accessed === 1 ? '' : 's'} read; ${
+          context.tool_calls || 0
+        } project tool call${context.tool_calls === 1 ? '' : 's'}; ${
+          context.available_files || 0
+        } files available`
+      );
+    } catch (error) {
+      setChatStatus(
+        error instanceof Error
+          ? error.message
+          : 'The model request failed.',
+        true
+      );
+    } finally {
+      chatSend.disabled = false;
+      chatModel.disabled = false;
+      chatInput.focus();
+    }
+  }
+
+  if (chatForm) {
+    chatForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      submitChatMessage();
+    });
+  }
+
+  if (chatInput) {
+    chatInput.addEventListener('keydown', (event) => {
+      if (
+        event.key === 'Enter'
+        && (event.ctrlKey || event.metaKey)
+      ) {
+        event.preventDefault();
+        submitChatMessage();
+      }
+    });
+  }
+
+  if (chatClear) {
+    chatClear.addEventListener('click', async () => {
+      if (!window.confirm('Clear this project chat?')) {
+        return;
+      }
+
+      chatClear.disabled = true;
+
+      try {
+        const response = await fetch(
+          `/api/projects/${encodeURIComponent(project)}/chat/messages`,
+          {method: 'DELETE'}
+        );
+        const result = await responseJson(response);
+
+        if (!response.ok) {
+          throw new Error(result.detail || 'Could not clear chat.');
+        }
+
+        renderChatMessages([]);
+        setChatStatus('Chat cleared');
+      } catch (error) {
+        setChatStatus(
+          error instanceof Error
+            ? error.message
+            : 'Could not clear chat.',
+          true
+        );
+      } finally {
+        chatClear.disabled = false;
+      }
+    });
+  }
+
+  toggle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (panel.dataset.columnState === 'expanded') {
+      normalizeColumns();
+    } else {
+      focusColumn('context');
+    }
   });
 
   function rememberFilter(value) {
@@ -312,6 +960,12 @@
     ) {
       event.preventDefault();
       setComposerOpen(false);
+    } else if (
+      event.key === 'Escape'
+      && chatPanel.dataset.columnState === 'expanded'
+    ) {
+      event.preventDefault();
+      setChatOpen(false);
     }
   });
 

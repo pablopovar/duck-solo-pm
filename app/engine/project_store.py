@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterator
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def database_path(project_root: Path) -> Path:
@@ -85,6 +85,18 @@ def ensure_schema(project_root: Path) -> None:
 
             CREATE INDEX IF NOT EXISTS activity_kind_visible
                 ON activity(kind, deleted_at, sequence DESC);
+
+            CREATE TABLE IF NOT EXISTS project_chat_messages (
+                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                id TEXT NOT NULL UNIQUE,
+                role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+                content TEXT NOT NULL,
+                model TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS project_chat_sequence
+                ON project_chat_messages(sequence DESC);
             """
         )
         database.execute(
@@ -361,3 +373,56 @@ def update_project_settings(
                 """,
                 (key, value, updated_at),
             )
+
+
+def add_chat_message(
+    project_root: Path,
+    message: dict[str, object],
+) -> None:
+    with connection(project_root) as database:
+        database.execute(
+            """
+            INSERT INTO project_chat_messages(
+                id, role, content, model, created_at
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                str(message["id"]),
+                str(message["role"]),
+                str(message["content"]),
+                str(message.get("model", "")),
+                str(message["created_at"]),
+            ),
+        )
+
+
+def list_chat_messages(
+    project_root: Path,
+    *,
+    limit: int = 100,
+) -> list[dict[str, object]]:
+    with connection(project_root) as database:
+        rows = database.execute(
+            """
+            SELECT id, role, content, model, created_at
+            FROM (
+                SELECT sequence, id, role, content, model, created_at
+                FROM project_chat_messages
+                ORDER BY sequence DESC
+                LIMIT ?
+            )
+            ORDER BY sequence ASC
+            """,
+            (limit,),
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def clear_chat_messages(project_root: Path) -> int:
+    with connection(project_root) as database:
+        cursor = database.execute(
+            "DELETE FROM project_chat_messages"
+        )
+
+    return cursor.rowcount
