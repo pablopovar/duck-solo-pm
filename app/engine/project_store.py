@@ -222,6 +222,47 @@ def list_activity(
     return [dict(row) for row in rows]
 
 
+def activity_item(
+    project_root: Path,
+    activity_id: str,
+) -> dict[str, object] | None:
+    with connection(project_root) as database:
+        row = database.execute(
+            """
+            SELECT id, kind, title, body, url, completed, pinned,
+                   created_at, updated_at
+            FROM activity
+            WHERE id = ? AND deleted_at IS NULL
+            """,
+            (activity_id,),
+        ).fetchone()
+
+    return None if row is None else dict(row)
+
+
+def convert_note_to_file(
+    project_root: Path,
+    activity_id: str,
+    relative_path: str,
+    url: str,
+    updated_at: str,
+) -> bool:
+    with connection(project_root) as database:
+        cursor = database.execute(
+            """
+            UPDATE activity
+            SET kind = 'file', body = ?, url = ?,
+                pinned = 0, updated_at = ?
+            WHERE id = ?
+              AND kind = 'note'
+              AND deleted_at IS NULL
+            """,
+            (relative_path, url, updated_at, activity_id),
+        )
+
+    return cursor.rowcount == 1
+
+
 def pinned_resources(project_root: Path) -> list[dict[str, object]]:
     with connection(project_root) as database:
         rows = database.execute(

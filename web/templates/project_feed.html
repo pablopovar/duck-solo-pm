@@ -310,6 +310,7 @@
             <option value="todo">Todos</option>
             <option value="link">Links</option>
             <option value="status">Statuses</option>
+            <option value="file">Files</option>
           </select>
 
           <button
@@ -373,6 +374,15 @@
                     {% endif %}
 
                     <div class="duck-feed-card-actions">
+                      {% if item.type == "note" and item.get("id", "") %}
+                        <button
+                          type="button"
+                          data-convert-note
+                          data-activity-id="{{ item.id }}"
+                          data-activity-title="{{ item.title }}"
+                        >Convert to file</button>
+                      {% endif %}
+
                       {% if item.type in ["link", "file", "document"] and item.get("id", "") %}
                         <button
                           type="button"
@@ -465,16 +475,16 @@
               <option value="todo">☑ Todo</option>
               <option value="status">&#9679; Status</option>
               <option value="link">↗ Link</option>
-              <option value="file" disabled>⌕ File — later</option>
+              <option value="file">⌕ File</option>
               <option value="check-in" disabled>◉ Check-in — later</option>
               <option value="event" disabled>◇ Event — later</option>
             </select>
 
             <div class="duck-composer-additions">
               <button
+                id="duck-file-shortcut"
                 type="button"
-                data-shell-action
-                title="Attachment persistence comes next"
+                title="Add a file"
               >⌕</button>
 
               <button
@@ -500,6 +510,66 @@
               placeholder="Write your note…"
             ></textarea>
 
+            <section
+              id="duck-file-fields"
+              class="duck-file-fields"
+              hidden
+            >
+              <fieldset class="duck-file-mode">
+                <legend>File source</legend>
+
+                <label>
+                  <input
+                    type="radio"
+                    name="duck-file-mode"
+                    value="upload"
+                    checked
+                  >
+                  Upload a file
+                </label>
+
+                <label>
+                  <input
+                    type="radio"
+                    name="duck-file-mode"
+                    value="markdown"
+                  >
+                  Write Markdown
+                </label>
+              </fieldset>
+
+              <div class="duck-file-path-fields">
+                <label for="duck-file-name">Filename under files/</label>
+                <input
+                  id="duck-file-name"
+                  type="text"
+                  maxlength="500"
+                  placeholder="Optional for uploads; e.g. file.md"
+                  autocomplete="off"
+                >
+              </div>
+
+              <div id="duck-file-upload-fields">
+                <label for="duck-file-upload">Choose file</label>
+                <input id="duck-file-upload" type="file">
+              </div>
+
+              <div id="duck-file-markdown-fields" hidden>
+                <label for="duck-file-markdown">Markdown source</label>
+                <textarea
+                  id="duck-file-markdown"
+                  rows="10"
+                  placeholder="# Document title&#10;&#10;Write Markdown here…"
+                ></textarea>
+              </div>
+
+              <p>
+                Saved in the Local Folder under files/ (for example,
+                files/file.md).
+                Existing files are never overwritten.
+              </p>
+            </section>
+
             <div class="duck-composer-actions">
               <p id="duck-composer-feedback" aria-live="polite">
                 Notes, todos, status updates, and links can be posted.
@@ -509,7 +579,7 @@
                 id="duck-character-counter"
                 class="duck-character-counter"
                 aria-live="polite"
-              >2,000 characters left</span>
+              >0 characters</span>
 
               <span>Ctrl/⌘ + Enter</span>
 

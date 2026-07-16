@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markdown_it import MarkdownIt
@@ -113,6 +113,10 @@ class QuickEntry(BaseModel):
 
 class ActivityPinUpdate(BaseModel):
     pinned: bool = True
+
+
+class NoteFileConversion(BaseModel):
+    path: str = ""
 
 
 class ProjectAboutUpdate(BaseModel):
@@ -804,12 +808,6 @@ def _activity_entry_data(
         )
 
     content = "\n".join(lines).strip()
-
-    if kind == "note" and len(content) > 2000:
-        raise HTTPException(
-            status_code=400,
-            detail="Notes are limited to 2,000 characters",
-        )
 
     if kind == "link" and len(content) > 20000:
         raise HTTPException(
@@ -1685,12 +1683,6 @@ def _format_quick_entry(
 
     content = "\n".join(lines).strip()
 
-    if kind == "todo" and len(content) > 2000:
-        raise HTTPException(
-            status_code=400,
-            detail="Todos are limited to 2,000 characters",
-        )
-
     timestamp = _quick_entry_timestamp()
 
     if kind == "status":
@@ -1790,12 +1782,6 @@ def add_quick_entry(
             ),
         )
 
-    if kind in {"note", "todo"} and len(content) > 2000:
-        raise HTTPException(
-            status_code=400,
-            detail=f"{kind.title()}s are limited to 2,000 characters",
-        )
-
     url = ""
 
     if kind == "link":
@@ -1828,6 +1814,314 @@ def add_quick_entry(
         "id": activity_id,
         "kind": kind,
         "file": ".pocket/project.sqlite3",
+    }
+
+
+def _project_file_relative_path(
+    raw_path: str,
+    *,
+    markdown: bool = False,
+) -> Path:
+    value = raw_path.strip().replace("\\", "/")
+
+    if not value:
+        raise HTTPException(
+            status_code=400,
+            detail="A project-relative path is required",
+        )
+
+    supplied = Path(value)
+
+    if supplied.parts and supplied.parts[0].casefold() == "files":
+        supplied = Path(*supplied.parts[1:])
+
+    relative = Path("files") / supplied
+
+    if supplied.is_absolute() or not supplied.parts or any(
+        part in {"", ".", ".."}
+        or any(ord(character) < 32 or ord(character) == 127 for character in part)
+        for part in supplied.parts
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Use a safe path inside the project Local Folder",
+        )
+
+    if markdown and relative.suffix.casefold() not in {
+        ".md",
+        ".markdown",
+    }:
+        relative = relative.with_name(relative.name + ".md")
+
+    if len(relative.as_posix()) > 500:
+        raise HTTPException(
+            status_code=400,
+            detail="Project-relative paths are limited to 500 characters",
+        )
+
+    return relative
+
+
+def _available_project_file(
+    root: Path,
+    relative: Path,
+) -> Path:
+    candidate = root / relative
+    resolved_root = root.resolve()
+
+    try:
+        candidate.resolve().relative_to(resolved_root)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="File path leaves the project Local Folder",
+        ) from exc
+
+    if not candidate.exists():
+        return candidate
+
+    suffix = relative.suffix
+    stem = (
+        relative.name[:-len(suffix)]
+        if suffix
+        else relative.name
+    )
+    number = 2
+
+    while True:
+        candidate = (
+            root
+            / relative.parent
+            / f"{stem}-{number}{suffix}"
+        )
+
+        try:
+            candidate.resolve().relative_to(resolved_root)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="File path leaves the project Local Folder",
+            ) from exc
+
+        if not candidate.exists():
+            return candidate
+
+        number += 1
+
+
+def _project_file_path(
+    root: Path,
+    raw_path: str,
+) -> Path:
+    relative = _project_file_relative_path(raw_path)
+    path = (root / relative).resolve()
+
+    try:
+        path.relative_to(root.resolve())
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="File path leaves the project Local Folder",
+        ) from exc
+
+    return path
+
+
+@app.post("/api/projects/{project}/files")
+async def add_project_file(
+    project: str,
+    request: Request,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+    root = _ensure_project_store(project)
+    form = await request.form()
+    mode = str(form.get("mode", "upload")).strip().casefold()
+    title = str(form.get("title", "")).strip()
+
+    if not title:
+        raise HTTPException(
+            status_code=400,
+            detail="A title is required",
+        )
+
+    if len(title) > 200:
+        raise HTTPException(
+            status_code=400,
+            detail="Titles are limited to 200 characters",
+        )
+
+    if mode == "markdown":
+        source = str(form.get("markdown", ""))
+        relative = _project_file_relative_path(
+            str(form.get("path", "")),
+            markdown=True,
+        )
+        destination = _available_project_file(root, relative)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.parent / f".{uuid4().hex}.upload"
+
+        try:
+            temporary.write_text(source, encoding="utf-8")
+            os.replace(temporary, destination)
+        except OSError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="The Markdown file could not be saved",
+            ) from exc
+        finally:
+            temporary.unlink(missing_ok=True)
+    elif mode == "upload":
+        upload = form.get("upload")
+        upload_name = str(getattr(upload, "filename", "") or "")
+
+        if upload is None or not upload_name or not hasattr(upload, "read"):
+            raise HTTPException(
+                status_code=400,
+                detail="Choose a file to upload",
+            )
+
+        path_override = str(form.get("path", "")).strip()
+        relative = _project_file_relative_path(path_override or upload_name)
+        destination = _available_project_file(root, relative)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.parent / f".{uuid4().hex}.upload"
+
+        try:
+            with temporary.open("wb") as output:
+                while True:
+                    chunk = await upload.read(1024 * 1024)
+
+                    if not chunk:
+                        break
+
+                    output.write(chunk)
+
+            os.replace(temporary, destination)
+        except OSError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="The uploaded file could not be saved",
+            ) from exc
+        finally:
+            temporary.unlink(missing_ok=True)
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Unknown file input mode",
+        )
+
+    relative_path = destination.relative_to(root).as_posix()
+    file_url = (
+        f"/api/projects/{quote(project, safe='')}/files/"
+        f"{quote(relative_path, safe='/')}"
+    )
+    timestamp = _quick_entry_timestamp()
+    activity_id = str(uuid4())
+    project_store.create_activity(
+        root,
+        {
+            "id": activity_id,
+            "kind": "file",
+            "title": title,
+            "body": relative_path,
+            "url": file_url,
+            "completed": False,
+            "pinned": False,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        },
+    )
+
+    return {
+        "saved": True,
+        "id": activity_id,
+        "kind": "file",
+        "file": relative_path,
+        "url": file_url,
+    }
+
+
+@app.get("/api/projects/{project}/files/{file_path:path}")
+def download_project_file(
+    project: str,
+    file_path: str,
+) -> FileResponse:
+    ensure_project_configured(project)
+    root = _ensure_project_store(project)
+    path = _project_file_path(root, file_path)
+
+    if not path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="File not found",
+        )
+
+    return FileResponse(path, filename=path.name)
+
+
+@app.post(
+    "/api/projects/{project}/activity/{activity_id}/convert-to-file",
+)
+def convert_note_to_file(
+    project: str,
+    activity_id: str,
+    conversion: NoteFileConversion,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+    root = _ensure_project_store(project)
+    item = project_store.activity_item(root, activity_id)
+
+    if item is None or str(item.get("kind", "")) != "note":
+        raise HTTPException(
+            status_code=404,
+            detail="Note not found",
+        )
+
+    relative = _project_file_relative_path(
+        conversion.path,
+        markdown=True,
+    )
+    destination = _available_project_file(root, relative)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.parent / f".{uuid4().hex}.upload"
+
+    try:
+        temporary.write_text(str(item.get("body", "")), encoding="utf-8")
+        os.replace(temporary, destination)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="The Note could not be converted to a file",
+        ) from exc
+    finally:
+        temporary.unlink(missing_ok=True)
+
+    relative_path = destination.relative_to(root).as_posix()
+    file_url = (
+        f"/api/projects/{quote(project, safe='')}/files/"
+        f"{quote(relative_path, safe='/')}"
+    )
+    converted = project_store.convert_note_to_file(
+        root,
+        activity_id,
+        relative_path,
+        file_url,
+        _quick_entry_timestamp(),
+    )
+
+    if not converted:
+        destination.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=409,
+            detail="The Note changed before it could be converted",
+        )
+
+    return {
+        "saved": True,
+        "id": activity_id,
+        "kind": "file",
+        "file": relative_path,
+        "url": file_url,
     }
 
 

@@ -36,6 +36,7 @@ body {
 }
 
 button,
+input,
 select,
 textarea {
   font: inherit;
@@ -563,6 +564,82 @@ a {
 .duck-character-counter.is-over {
   color: #b42318;
   font-weight: 800;
+}
+
+.duck-file-fields {
+  display: grid;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.duck-file-fields[hidden],
+.duck-file-fields [hidden] {
+  display: none !important;
+}
+
+.duck-file-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.duck-file-mode legend {
+  margin-bottom: 7px;
+  color: #5b6d79;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.duck-file-mode label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#duck-file-upload-fields,
+#duck-file-path-fields,
+#duck-file-markdown-fields {
+  display: grid;
+  gap: 7px;
+}
+
+#duck-file-upload-fields label,
+#duck-file-path-fields label,
+#duck-file-markdown-fields label {
+  color: #5b6d79;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+#duck-file-upload,
+#duck-file-name,
+#duck-file-markdown {
+  width: 100%;
+}
+
+#duck-file-name,
+#duck-file-markdown {
+  padding: 10px 11px;
+  border: 1px solid var(--duck-border);
+  border-radius: 6px;
+  color: var(--duck-dark);
+  background: #fff;
+}
+
+#duck-file-markdown {
+  min-height: 190px;
+  resize: vertical;
+}
+
+.duck-file-fields > p {
+  margin: 0;
+  color: #71808a;
+  font-size: 11px;
 }
 
 .duck-composer-actions button {

@@ -29,6 +29,30 @@
   const characterCounter = document.getElementById(
     'duck-character-counter'
   );
+  const fileFields = document.getElementById(
+    'duck-file-fields'
+  );
+  const fileShortcut = document.getElementById(
+    'duck-file-shortcut'
+  );
+  const fileUploadFields = document.getElementById(
+    'duck-file-upload-fields'
+  );
+  const fileMarkdownFields = document.getElementById(
+    'duck-file-markdown-fields'
+  );
+  const fileUpload = document.getElementById(
+    'duck-file-upload'
+  );
+  const fileName = document.getElementById(
+    'duck-file-name'
+  );
+  const fileMarkdown = document.getElementById(
+    'duck-file-markdown'
+  );
+  const fileModeInputs = Array.from(
+    document.querySelectorAll('input[name="duck-file-mode"]')
+  );
   const filter = document.getElementById(
     'duck-feed-filter'
   );
@@ -55,6 +79,9 @@
   );
   const deleteButtons = Array.from(
     document.querySelectorAll('[data-delete-activity]')
+  );
+  const convertNoteButtons = Array.from(
+    document.querySelectorAll('[data-convert-note]')
   );
   const aboutEdit = document.getElementById('duck-about-edit');
   const aboutDisplay = document.getElementById('duck-about-display');
@@ -923,7 +950,15 @@
 
     if (open) {
       window.setTimeout(
-        () => composer && composer.focus(),
+        () => {
+          if (type && type.value === 'file') {
+            if (composerTitle) {
+              composerTitle.focus();
+            }
+          } else if (composer) {
+            composer.focus();
+          }
+        },
         0
       );
     } else {
@@ -989,20 +1024,14 @@
     event: 'Event title',
   };
 
-  const characterLimits = {
-    note: 2000,
-    todo: 2000,
-  };
-
   function updateCharacterCounter() {
     if (!type || !composer || !characterCounter) {
       return;
     }
 
-    const limit = characterLimits[type.value];
+    composer.removeAttribute('maxlength');
 
-    if (!limit) {
-      composer.removeAttribute('maxlength');
+    if (!['note', 'todo'].includes(type.value)) {
       characterCounter.hidden = true;
       characterCounter.classList.remove(
         'is-low',
@@ -1011,44 +1040,86 @@
       return;
     }
 
-    composer.maxLength = limit;
     characterCounter.hidden = false;
-
-    const remaining = limit - composer.value.length;
-    const displayed = Math.max(0, remaining);
+    const count = composer.value.length;
     characterCounter.textContent =
-      `${displayed.toLocaleString()} character${
-        displayed === 1 ? '' : 's'
-      } left`;
-    characterCounter.classList.toggle(
-      'is-low',
-      remaining <= 200 && remaining >= 0
+      `${count.toLocaleString()} character${count === 1 ? '' : 's'}`;
+    characterCounter.classList.remove('is-low', 'is-over');
+  }
+
+  function selectedFileMode() {
+    const selected = fileModeInputs.find((input) => input.checked);
+    return selected ? selected.value : 'upload';
+  }
+
+  function updateFileMode() {
+    const markdownMode = selectedFileMode() === 'markdown';
+
+    if (fileUploadFields) {
+      fileUploadFields.hidden = markdownMode;
+    }
+
+    if (fileMarkdownFields) {
+      fileMarkdownFields.hidden = !markdownMode;
+    }
+  }
+
+  function updateComposerForType() {
+    if (!type || !composer) {
+      return;
+    }
+
+    const isFile = type.value === 'file';
+    composer.hidden = isFile;
+
+    if (fileFields) {
+      fileFields.hidden = !isFile;
+    }
+
+    composer.placeholder =
+      placeholders[type.value]
+      || 'Add project activity…';
+
+    if (composerTitle) {
+      composerTitle.placeholder =
+        titlePlaceholders[type.value]
+        || 'Activity title';
+    }
+
+    if (post) {
+      post.textContent = isFile ? 'Save file' : 'Post';
+    }
+
+    showFeedback(
+      isFile
+        ? 'Upload a file or write Markdown and save it as a project file.'
+        : 'Notes, todos, status updates, and links can be posted.'
     );
-    characterCounter.classList.toggle(
-      'is-over',
-      remaining < 0
-    );
+    updateFileMode();
+    updateCharacterCounter();
   }
 
   if (type && composer) {
-    type.addEventListener('change', () => {
-      composer.placeholder =
-        placeholders[type.value]
-        || 'Add project activity…';
-      if (composerTitle) {
-        composerTitle.placeholder =
-          titlePlaceholders[type.value]
-          || 'Activity title';
-      }
-      updateCharacterCounter();
-    });
+    type.addEventListener('change', updateComposerForType);
 
     composer.addEventListener(
       'input',
       updateCharacterCounter
     );
 
-    updateCharacterCounter();
+    updateComposerForType();
+  }
+
+  for (const input of fileModeInputs) {
+    input.addEventListener('change', updateFileMode);
+  }
+
+  if (fileShortcut && type) {
+    fileShortcut.addEventListener('click', () => {
+      type.value = 'file';
+      updateComposerForType();
+      setComposerOpen(true);
+    });
   }
 
   const supportedTypes = new Set([
@@ -1056,6 +1127,7 @@
     'todo',
     'status',
     'link',
+    'file',
   ]);
 
   const typeLabels = {
@@ -1063,6 +1135,7 @@
     todo: 'Todo',
     status: 'Status update',
     link: 'Link',
+    file: 'File',
   };
 
   function showFeedback(message) {
@@ -1073,7 +1146,7 @@
 
   function explainUnavailable() {
     showFeedback(
-      'File attachments and additional fields are not enabled yet.'
+      'Additional fields are not enabled yet.'
     );
   }
 
@@ -1189,6 +1262,81 @@
     }
   }
 
+  async function convertNoteToFile(button) {
+    const activityId = button.dataset.activityId || '';
+    const title = button.dataset.activityTitle || 'note';
+    const suggestedName = `${
+      title
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        || 'note'
+    }.md`;
+    const path = window.prompt(
+      'Filename under files/:',
+      suggestedName
+    );
+
+    if (!activityId || !project || path === null) {
+      return;
+    }
+
+    if (!path.trim()) {
+      showFeedback('Enter a filename for the converted Note.');
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = 'Converting…';
+
+    try {
+      const response = await fetch(
+        `/api/projects/${
+          encodeURIComponent(project)
+        }/activity/${
+          encodeURIComponent(activityId)
+        }/convert-to-file`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({path: path.trim()}),
+        }
+      );
+      let result = {};
+
+      try {
+        result = await response.json();
+      } catch (_error) {
+        result = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          result.detail || 'The Note could not be converted.'
+        );
+      }
+
+      if (filter) {
+        filter.value = 'file';
+        rememberFilter('file');
+      }
+
+      showFeedback('Note converted to a file. Refreshing…');
+      window.location.reload();
+    } catch (error) {
+      showFeedback(
+        error instanceof Error
+          ? error.message
+          : 'The Note could not be converted.'
+      );
+      button.disabled = false;
+      button.textContent = 'Convert to file';
+    }
+  }
+
   function setAboutEditing(editing) {
     if (!aboutForm || !aboutDisplay || !aboutEdit) {
       return;
@@ -1272,6 +1420,116 @@
     });
   }
 
+  async function submitProjectFile(title) {
+    if (!post || !project) {
+      return;
+    }
+
+    const mode = selectedFileMode();
+    const formData = new FormData();
+    formData.append('title', title);
+    formData.append('mode', mode);
+
+    if (mode === 'markdown') {
+      const filename = fileName ? fileName.value.trim() : '';
+
+      if (!filename) {
+        showFeedback('Enter a project-relative path for the Markdown file.');
+
+        if (fileName) {
+          fileName.focus();
+        }
+
+        return;
+      }
+
+      formData.append('path', filename);
+      formData.append(
+        'markdown',
+        fileMarkdown ? fileMarkdown.value : ''
+      );
+    } else {
+      const selected = fileUpload && fileUpload.files
+        ? fileUpload.files[0]
+        : null;
+
+      if (!selected) {
+        showFeedback('Choose a file to upload.');
+
+        if (fileUpload) {
+          fileUpload.focus();
+        }
+
+        return;
+      }
+
+      formData.append('upload', selected, selected.name);
+
+      if (fileName && fileName.value.trim()) {
+        formData.append('path', fileName.value.trim());
+      }
+    }
+
+    post.disabled = true;
+    post.textContent = 'Saving…';
+    showFeedback('Saving file…');
+
+    try {
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(project)}/files`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+      let result = {};
+
+      try {
+        result = await response.json();
+      } catch (_error) {
+        result = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          result.detail || 'The file could not be saved.'
+        );
+      }
+
+      if (composerTitle) {
+        composerTitle.value = '';
+      }
+
+      if (fileUpload) {
+        fileUpload.value = '';
+      }
+
+      if (fileName) {
+        fileName.value = '';
+      }
+
+      if (fileMarkdown) {
+        fileMarkdown.value = '';
+      }
+
+      if (filter) {
+        filter.value = 'file';
+        rememberFilter('file');
+      }
+
+      showFeedback('File saved. Refreshing…');
+      window.location.reload();
+    } catch (error) {
+      showFeedback(
+        error instanceof Error
+          ? error.message
+          : 'The file could not be saved.'
+      );
+      post.disabled = false;
+      post.textContent = 'Save file';
+    }
+  }
+
   async function submitEntry() {
     if (!type || !composer || !composerTitle || !post || !project) {
       return;
@@ -1283,7 +1541,7 @@
 
     if (!supportedTypes.has(kind)) {
       showFeedback(
-        'Choose Note, Todo, Status, or Link for now.'
+        'Choose Note, Todo, Status, Link, or File.'
       );
       return;
     }
@@ -1294,23 +1552,16 @@
       return;
     }
 
+    if (kind === 'file') {
+      await submitProjectFile(title);
+      return;
+    }
+
     if ((kind === 'note' || kind === 'link') && !text) {
       showFeedback(
         kind === 'link'
           ? 'Enter the link URL before posting.'
           : 'Enter the note text before posting.'
-      );
-      composer.focus();
-      return;
-    }
-
-    const characterLimit = characterLimits[kind];
-
-    if (characterLimit && text.length > characterLimit) {
-      showFeedback(
-        `${typeLabels[kind]}s are limited to ${
-          characterLimit.toLocaleString()
-        } characters.`
       );
       composer.focus();
       return;
@@ -1394,6 +1645,13 @@
     );
   }
 
+  for (const button of convertNoteButtons) {
+    button.addEventListener(
+      'click',
+      () => convertNoteToFile(button)
+    );
+  }
+
   document.querySelectorAll('[data-shell-action]').forEach(
     (button) => {
       button.addEventListener(
@@ -1405,6 +1663,18 @@
 
   if (composer) {
     composer.addEventListener('keydown', (event) => {
+      if (
+        event.key === 'Enter'
+        && (event.ctrlKey || event.metaKey)
+      ) {
+        event.preventDefault();
+        submitEntry();
+      }
+    });
+  }
+
+  if (fileMarkdown) {
+    fileMarkdown.addEventListener('keydown', (event) => {
       if (
         event.key === 'Enter'
         && (event.ctrlKey || event.metaKey)
