@@ -40,7 +40,10 @@ from app.engine.projects import (
     editable_file_labels,
     initialize_project,
     is_configured,
+    migrate_project_state,
+    project_state_status,
     project_summaries,
+    project_system_root,
     project_root,
     read_dashboard,
     read_project_resources,
@@ -48,7 +51,12 @@ from app.engine.projects import (
     touch_project,
     write_editable_markdown,
 )
-from app.engine import project_chat, project_store
+from app.engine import (
+    project_chat,
+    project_store,
+    system_chat,
+    system_store,
+)
 
 
 WEB_DIR = Path(__file__).resolve().parent
@@ -579,8 +587,7 @@ def _activity_store_path(
     project: str,
 ) -> Path:
     return (
-        project_root(project)
-        / ".pocket"
+        project_system_root(project)
         / "activity.jsonl"
     )
 
@@ -654,7 +661,11 @@ def _activity_feed_items(
                 "timestamp": str(
                     record.get("timestamp", "")
                 ),
-                "source": ".pocket/activity.jsonl",
+                "source": (
+                    _activity_store_path(project)
+                    .relative_to(project_root(project))
+                    .as_posix()
+                ),
                 "icon": presentation["icon"],
                 "url": url,
                 "pinned": bool(
@@ -897,7 +908,9 @@ def _append_activity_record(
     return {
         "saved": True,
         "kind": kind,
-        "file": ".pocket/activity.jsonl",
+        "file": (
+            path.relative_to(project_root(project)).as_posix()
+        ),
     }
 
 
@@ -1140,7 +1153,11 @@ def _stored_feed_items(
                 "title": str(record["title"]),
                 "body": str(record["body"]),
                 "timestamp": str(record["created_at"]),
-                "source": ".pocket/project.sqlite3",
+                "source": (
+                    project_store.database_path(root)
+                    .relative_to(root)
+                    .as_posix()
+                ),
                 "icon": icon,
                 "url": str(record["url"]),
                 "pinned": bool(record["pinned"]),
@@ -1316,6 +1333,16 @@ def context(
         "local_repo": local_repo,
         "reminders": reminder_settings(),
         "error": error,
+        "project_state": (
+            project_state_status(project)
+            if project
+            else {
+                "directory": ".duck",
+                "legacy": False,
+                "conflict": False,
+                "legacy_is_symlink": False,
+            }
+        ),
         **duck_settings_context(project),
         "quote": quote,
     }
@@ -1350,6 +1377,49 @@ def ensure_project_configured(
         )
 
 
+def _system_chat_catalog() -> list[system_chat.SystemProject]:
+    summaries = project_summaries()
+    names = [str(item["name"]) for item in summaries]
+    system_store.sync_projects(names)
+    registry = {
+        str(item["id"]): item
+        for item in system_store.registered_projects()
+    }
+    catalog: list[system_chat.SystemProject] = []
+
+    for item in summaries:
+        name = str(item["name"])
+        configured = is_configured(name)
+        root = (
+            _ensure_project_store(name)
+            if configured
+            else project_root(name)
+        )
+        catalog.append(
+            system_chat.SystemProject(
+                name=name,
+                title=project_title(name),
+                root=root,
+                configured=configured,
+                score=int(item.get("score", 0)),
+                last_opened=int(item.get("last_opened", 0)),
+                pinned=bool(registry.get(name, {}).get("pinned", False)),
+                profile=(
+                    project_store.project_profile(root)
+                    if configured
+                    else {"what": "", "why": "", "class": ""}
+                ),
+                settings=(
+                    project_store.project_settings(root)
+                    if configured
+                    else {}
+                ),
+            )
+        )
+
+    return catalog
+
+
 @app.get(
     "/project/{project}/open",
 )
@@ -1375,6 +1445,26 @@ def record_project_open(
     )
 
 
+@app.post("/project/{project}/migrate-to-duck")
+def migrate_legacy_project_state(
+    project: str,
+) -> RedirectResponse:
+    ensure_project_exists(project)
+
+    try:
+        migrate_project_state(project)
+    except ProjectError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
+
+    return RedirectResponse(
+        url=f"/project/{quote(project, safe='')}",
+        status_code=303,
+    )
+
+
 @app.get(
     "/",
     response_class=HTMLResponse,
@@ -1385,7 +1475,7 @@ def home(
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
-        context=context(request),
+        context=context(request, state="system_chat"),
     )
 
 
@@ -1813,7 +1903,11 @@ def add_quick_entry(
         "saved": True,
         "id": activity_id,
         "kind": kind,
-        "file": ".pocket/project.sqlite3",
+        "file": (
+            project_store.database_path(root)
+            .relative_to(root)
+            .as_posix()
+        ),
     }
 
 
@@ -2182,6 +2276,100 @@ def update_project_about(
         "saved": True,
         "profile": profile,
     }
+
+
+@app.get("/api/system/chat/models")
+def system_chat_models() -> dict[str, object]:
+    try:
+        models = project_chat.available_models()
+    except project_chat.ModelServiceError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=str(exc),
+        ) from exc
+
+    configured = project_chat.configured_model()
+
+    if configured and configured not in models:
+        models.insert(0, configured)
+
+    return {
+        "models": models,
+        "default": configured or (models[0] if models else ""),
+    }
+
+
+@app.get("/api/system/chat/messages")
+def system_chat_messages() -> dict[str, object]:
+    return {
+        "messages": [
+            _chat_message_payload(message)
+            for message in system_store.list_chat_messages(limit=100)
+        ],
+    }
+
+
+@app.post("/api/system/chat/messages")
+def send_system_chat_message(
+    request: ProjectChatRequest,
+) -> dict[str, object]:
+    message = request.message.strip()
+    model = request.model.strip() or project_chat.configured_model()
+
+    if not message:
+        raise HTTPException(status_code=400, detail="Enter a message")
+
+    if len(message) > 12_000:
+        raise HTTPException(
+            status_code=400,
+            detail="Messages are limited to 12,000 characters",
+        )
+
+    try:
+        history = system_store.list_chat_messages(limit=23)
+        history.append({"role": "user", "content": message})
+        chat_result = system_chat.complete_system_chat(
+            model,
+            history,
+            _system_chat_catalog(),
+        )
+    except (ProjectError, DuckSettingsError) as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except project_chat.ModelServiceError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    timestamp = _quick_entry_timestamp()
+    user_message = {
+        "id": str(uuid4()),
+        "role": "user",
+        "content": message,
+        "model": model,
+        "created_at": timestamp,
+    }
+    assistant_message = {
+        "id": str(uuid4()),
+        "role": "assistant",
+        "content": chat_result.content,
+        "model": model,
+        "created_at": timestamp,
+    }
+    system_store.add_chat_message(user_message)
+    system_store.add_chat_message(assistant_message)
+
+    return {
+        "user_message": _chat_message_payload(user_message),
+        "assistant_message": _chat_message_payload(assistant_message),
+        "context": {
+            "project_count": chat_result.project_count,
+            "tool_calls": chat_result.tool_calls,
+            "accessed_projects": list(chat_result.accessed_projects),
+        },
+    }
+
+
+@app.delete("/api/system/chat/messages")
+def clear_system_chat() -> dict[str, object]:
+    return {"deleted": system_store.clear_chat_messages()}
 
 
 @app.get(

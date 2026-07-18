@@ -91,8 +91,7 @@ def project_settings_path(
     project: str,
 ) -> Path:
     return (
-        project_engine.project_root(project)
-        / ".pocket"
+        project_engine.project_system_root(project)
         / "project-settings.json"
     )
 
@@ -101,8 +100,7 @@ def session_values_path(
     project: str,
 ) -> Path:
     return (
-        project_engine.project_root(project)
-        / ".pocket"
+        project_engine.project_system_root(project)
         / "session-values.json"
     )
 

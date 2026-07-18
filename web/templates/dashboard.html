@@ -15,6 +15,13 @@
     href="/static/app.css"
   >
 
+  {% if state == "system_chat" %}
+    <link
+      rel="stylesheet"
+      href="/static/system-chat.css"
+    >
+  {% endif %}
+
   {% if state == "editor" %}
     <link
       rel="stylesheet"
@@ -129,8 +136,62 @@
       ></div>
     </aside>
 
-    <section class="dashboard-panel{% if state == 'editor' %} editor-panel{% endif %}">
-      {% if state == "dashboard" %}
+    <section class="dashboard-panel{% if state == 'editor' %} editor-panel{% endif %}{% if state == 'system_chat' %} system-chat-dashboard{% endif %}">
+      {% if state == "system_chat" %}
+        <section class="duck-system-chat" aria-labelledby="duck-system-chat-title">
+          <header class="duck-system-chat-header">
+            <div>
+              <h1 id="duck-system-chat-title">Ask Duck</h1>
+              <p>Across every configured project's Duck data and Activity.</p>
+            </div>
+
+            <div class="duck-system-chat-header-actions">
+              <button
+                id="duck-system-chat-focus"
+                type="button"
+              >Focus</button>
+
+              <button id="duck-system-chat-clear" type="button">Clear</button>
+            </div>
+          </header>
+
+          <div class="duck-system-chat-toolbar">
+            <label for="duck-system-chat-model">Model</label>
+            <select id="duck-system-chat-model" disabled>
+              <option value="">Loading models...</option>
+            </select>
+          </div>
+
+          <div
+            id="duck-system-chat-messages"
+            class="duck-system-chat-messages"
+            aria-live="polite"
+          >
+            <p class="duck-system-chat-empty">
+              Ask about projects, recent activity, notes, statuses, links,
+              priorities, or incomplete Todos.
+            </p>
+          </div>
+
+          <form id="duck-system-chat-form" class="duck-system-chat-form">
+            <label class="duck-visually-hidden" for="duck-system-chat-input">
+              Message
+            </label>
+            <textarea
+              id="duck-system-chat-input"
+              rows="2"
+              maxlength="12000"
+              placeholder="Ask across Duck..."
+            ></textarea>
+
+            <div class="duck-system-chat-submit-row">
+              <span id="duck-system-chat-status" aria-live="polite"></span>
+              <button id="duck-system-chat-send" type="submit">Send</button>
+            </div>
+          </form>
+        </section>
+
+      {% elif state == "dashboard" %}
         <!-- DUCK SETTINGS SUBSYSTEM -->
         <section
           id="duck-session-state"
@@ -522,7 +583,7 @@
               <input
                 name="project_name"
                 type="text"
-                required
+                placeholder="Defaults to the folder name"
               >
             </label>
 
@@ -536,7 +597,6 @@
                 max="100"
                 step="1"
                 value="0"
-                required
               >
             </label>
 
@@ -546,7 +606,6 @@
               <input
                 name="canonical"
                 type="url"
-                required
               >
             </label>
 
@@ -556,7 +615,6 @@
               <input
                 name="url"
                 type="url"
-                required
               >
             </label>
 
@@ -567,7 +625,6 @@
               <input
                 name="chatgpt_url"
                 type="url"
-                required
               >
             </label>
 
@@ -654,7 +711,7 @@
         <div class="placeholder">
           <p>
             This project is configured,
-            but .pocket/dashboard.md is missing.
+            but .duck/dashboard.md is missing.
           </p>
         </div>
 
@@ -2309,6 +2366,10 @@
       );
     })();
   </script>
+
+  {% if state == "system_chat" %}
+    <script src="/static/system-chat.js"></script>
+  {% endif %}
 
 </body>
 </html>

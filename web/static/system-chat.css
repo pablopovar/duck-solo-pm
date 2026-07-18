@@ -1,0 +1,280 @@
+.system-chat-dashboard {
+  height: calc(100vh - 54px);
+  height: calc(100dvh - 54px);
+  overflow: hidden;
+  padding: clamp(8px, 1.2vw, 16px);
+  background: #f7f8fa;
+}
+
+.duck-system-chat {
+  width: 100%;
+  height: 100%;
+  margin: 0 auto;
+  display: grid;
+  grid-template-rows: auto auto minmax(180px, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid #d7dce2;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgb(33 43 54 / 8%);
+}
+
+.duck-system-chat-header,
+.duck-system-chat-toolbar,
+.duck-system-chat-submit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.duck-system-chat-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid #e1e5ea;
+}
+
+.duck-system-chat-header h1 {
+  margin: 0;
+  color: #293642;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.duck-system-chat-header p {
+  margin: 2px 0 0;
+  color: #667789;
+  font-size: 14px;
+}
+
+.duck-system-chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.duck-system-chat-header button,
+.duck-system-chat-toolbar button,
+.duck-system-chat-submit-row button {
+  padding: 7px 12px;
+  border: 1px solid #cbd2da;
+  border-radius: 8px;
+  background: #fff;
+  color: #334250;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.duck-system-chat-toolbar {
+  justify-content: flex-start;
+  padding: 7px 16px;
+  border-bottom: 1px solid #e1e5ea;
+}
+
+.duck-system-chat-toolbar label {
+  color: #607181;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 13px;
+}
+
+.duck-system-chat-toolbar select {
+  min-width: 220px;
+  max-width: 100%;
+  padding: 7px 10px;
+  border: 1px solid #cbd2da;
+  border-radius: 8px;
+  background: #fff;
+  color: #293642;
+  font: inherit;
+}
+
+.duck-system-chat-messages {
+  min-height: 0;
+  overflow-y: auto;
+  padding: clamp(16px, 2vw, 30px);
+  scroll-padding-block: 24px;
+  background: #fafbfc;
+}
+
+.duck-system-chat-empty {
+  margin: 40px auto;
+  max-width: 650px;
+  color: #7a8793;
+  font-size: 18px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.duck-system-message {
+  max-width: min(760px, 82%);
+  margin: 0 0 18px;
+  padding: 13px 16px;
+  border: 1px solid #dce1e6;
+  border-radius: 12px;
+  color: #2d3944;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.duck-system-message-user {
+  margin-left: auto;
+  border-color: #f0b27b;
+  background: #fff4e9;
+}
+
+.duck-system-message-assistant {
+  width: min(920px, 100%);
+  max-width: 100%;
+  margin-right: auto;
+  margin-left: auto;
+  padding: 2px 0 12px;
+  border: 0;
+  border-bottom: 1px solid #e1e5ea;
+  border-radius: 0;
+  background: transparent;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.duck-system-message-assistant > :first-child {
+  margin-top: 0;
+}
+
+.duck-system-message-assistant > :last-child {
+  margin-bottom: 0;
+}
+
+.duck-system-message-assistant p,
+.duck-system-message-assistant ul,
+.duck-system-message-assistant ol,
+.duck-system-message-assistant blockquote {
+  margin-block: 0.8em;
+}
+
+.duck-system-message-assistant h1,
+.duck-system-message-assistant h2,
+.duck-system-message-assistant h3 {
+  margin: 1.25em 0 0.55em;
+  line-height: 1.25;
+}
+
+.duck-system-message-assistant code,
+.duck-system-message pre {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    "Liberation Mono",
+    monospace;
+}
+
+.duck-system-message pre {
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f0f3f5;
+}
+
+.duck-system-chat-form {
+  padding: 9px 16px 10px;
+  border-top: 1px solid #e1e5ea;
+  background: #fff;
+}
+
+.duck-system-chat-form textarea {
+  width: 100%;
+  height: 48px;
+  min-height: 48px;
+  max-height: 144px;
+  resize: none;
+  overflow-y: hidden;
+  padding: 11px 13px;
+  border: 1px solid #cbd2da;
+  border-radius: 10px;
+  color: #293642;
+  font: inherit;
+  line-height: 1.45;
+}
+
+.duck-system-chat-submit-row {
+  margin-top: 6px;
+}
+
+#duck-system-chat-status {
+  color: #687987;
+  font-size: 13px;
+}
+
+#duck-system-chat-status.is-error {
+  color: #b42318;
+}
+
+.duck-system-chat-submit-row button {
+  min-width: 90px;
+  min-height: 38px;
+  border-color: #e96200;
+  background: #f56a00;
+  color: #fff;
+}
+
+.duck-system-chat button:disabled,
+.duck-system-chat select:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.duck-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 760px) {
+  .system-chat-dashboard {
+    height: auto;
+    min-height: calc(100vh - 54px);
+    padding: 10px;
+  }
+
+  .duck-system-chat {
+    min-height: calc(100vh - 74px);
+  }
+
+  .duck-system-chat-header {
+    align-items: flex-start;
+  }
+
+  .duck-system-chat-header p {
+    display: none;
+  }
+
+  .duck-system-chat-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .duck-system-chat-toolbar select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .duck-system-message {
+    max-width: 95%;
+  }
+}

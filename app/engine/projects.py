@@ -40,13 +40,16 @@ POCKET_TIMEZONE = os.environ.get(
 )
 
 EDITABLE_MARKDOWN_FILES: dict[str, Path] = {
-    "config.md": Path(".pocket/config.md"),
-    "dashboard.md": Path(".pocket/dashboard.md"),
+    "config.md": Path(".duck/config.md"),
+    "dashboard.md": Path(".duck/dashboard.md"),
     "inbox.md": Path("inbox.md"),
-    "manifesto.md": Path(".pocket/manifesto.md"),
-    "status.md": Path(".pocket/status.md"),
+    "manifesto.md": Path(".duck/manifesto.md"),
+    "status.md": Path(".duck/status.md"),
     "canvas.md": Path("canvas.md"),
 }
+
+PROJECT_SYSTEM_DIRECTORY = ".duck"
+LEGACY_PROJECT_SYSTEM_DIRECTORY = ".pocket"
 
 _FRONTMATTER = re.compile(
     r"\A---[ \t]*\n(?P<frontmatter>.*?)\n---[ \t]*(?:\n|\Z)(?P<body>.*)\Z",
@@ -108,8 +111,75 @@ def project_root(project: str) -> Path:
     return candidate
 
 
+def canonical_project_system_root(project: str) -> Path:
+    return project_root(project) / PROJECT_SYSTEM_DIRECTORY
+
+
+def legacy_project_system_root(project: str) -> Path:
+    return project_root(project) / LEGACY_PROJECT_SYSTEM_DIRECTORY
+
+
+def project_system_root(project: str) -> Path:
+    """Return canonical state, falling back to unmigrated legacy state."""
+    canonical = canonical_project_system_root(project)
+    legacy = legacy_project_system_root(project)
+
+    if canonical.exists() or not legacy.exists():
+        return canonical
+
+    return legacy
+
+
+def project_state_status(project: str) -> dict[str, object]:
+    canonical = canonical_project_system_root(project)
+    legacy = legacy_project_system_root(project)
+    canonical_exists = canonical.exists()
+    legacy_exists = legacy.exists()
+
+    return {
+        "directory": (
+            PROJECT_SYSTEM_DIRECTORY
+            if canonical_exists or not legacy_exists
+            else LEGACY_PROJECT_SYSTEM_DIRECTORY
+        ),
+        "legacy": legacy_exists and not canonical_exists,
+        "conflict": legacy_exists and canonical_exists,
+        "legacy_is_symlink": legacy.is_symlink(),
+    }
+
+
+def migrate_project_state(project: str) -> Path:
+    canonical = canonical_project_system_root(project)
+    legacy = legacy_project_system_root(project)
+
+    if canonical.exists():
+        if legacy.exists() or legacy.is_symlink():
+            raise ProjectError(
+                "Both .duck and .pocket exist. Resolve the conflict manually."
+            )
+        return canonical
+
+    if legacy.is_symlink():
+        raise ProjectError(
+            ".pocket is a symbolic link. Resolve it manually before migration."
+        )
+
+    if not legacy.is_dir():
+        raise ProjectError("No legacy .pocket directory was found.")
+
+    try:
+        legacy.rename(canonical)
+    except OSError as exc:
+        raise ProjectError(
+            f"Could not migrate .pocket to .duck: {exc}"
+        ) from exc
+
+    return canonical
+
+
 def pocket_root(project: str) -> Path:
-    return project_root(project) / ".pocket"
+    """Compatibility name for older callers; returns active Duck state."""
+    return project_system_root(project)
 
 
 def project_score(project: str) -> int:
@@ -302,7 +372,13 @@ def editable_markdown_path(
         raise EditableFileNotAllowed(label)
 
     base = project_root(project)
-    candidate = (base / relative).resolve()
+    if relative.parts and relative.parts[0] == PROJECT_SYSTEM_DIRECTORY:
+        candidate = (
+            project_system_root(project)
+            / Path(*relative.parts[1:])
+        ).resolve()
+    else:
+        candidate = (base / relative).resolve()
 
     if not candidate.is_relative_to(base):
         raise EditableFileNotAllowed(label)
@@ -441,13 +517,14 @@ def initialize_project(
 ) -> list[str]:
     base = project_root(folder)
 
-    config_path = base / ".pocket" / "config.md"
+    config_path = base / ".duck" / "config.md"
+    legacy_config_path = base / ".pocket" / "config.md"
 
-    if config_path.exists():
+    if config_path.exists() or legacy_config_path.exists():
         raise ProjectAlreadyConfigured(folder)
 
     try:
-        score_value = int(score)
+        score_value = int(score or 0)
     except (TypeError, ValueError) as exc:
         raise ProjectError(
             "Score must be an integer from 0 to 100"
@@ -460,7 +537,7 @@ def initialize_project(
 
     values = {
         "folder": folder,
-        "project": project.strip(),
+        "project": project.strip() or folder,
         "score": score_value,
         "root": f"/projects/{folder}",
         "project_folder_reference": f"$ROOT/projects/{folder}",
@@ -477,19 +554,8 @@ def initialize_project(
         "custom_3_title": custom_3_title.strip(),
         "custom_3_content": custom_3_content.strip(),
         "started": _started_date(),
-        "manifesto": ".pocket/manifesto.md",
+        "manifesto": ".duck/manifesto.md",
     }
-
-    for field in (
-        "project",
-        "canonical",
-        "url",
-        "chatgpt_url",
-    ):
-        if not values[field]:
-            raise ProjectError(
-                f"Missing required field: {field}"
-            )
 
     environment = _template_environment()
 
@@ -508,15 +574,21 @@ def initialize_project(
         template_name: environment
         .get_template(template_name)
         .render(**values)
+        .replace(".pocket/", ".duck/")
         for template_name in template_names
     }
 
     created: list[str] = []
 
-    # .pocket/config.md is written last so an incomplete
+    # .duck/config.md is written last so an incomplete
     # initialization does not appear configured.
     for template_name in template_names:
-        destination = base / template_name
+        destination_name = template_name.replace(
+            ".pocket/",
+            ".duck/",
+            1,
+        )
+        destination = base / destination_name
 
         if destination.exists():
             continue
@@ -531,6 +603,6 @@ def initialize_project(
             encoding="utf-8",
         )
 
-        created.append(template_name)
+        created.append(destination_name)
 
     return created

@@ -92,6 +92,37 @@ a {
   overflow: hidden;
 }
 
+.duck-state-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 18px;
+  border-bottom: 1px solid #d99813;
+  background: #fff3cd;
+  color: #5f4300;
+  font-size: 14px;
+}
+
+.duck-state-warning form {
+  margin: 0;
+}
+
+.duck-state-warning button {
+  padding: 7px 12px;
+  border: 1px solid #9c6b00;
+  border-radius: 7px;
+  background: #fff;
+  color: #5f4300;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.duck-has-state-warning .duck-feed-layout {
+  height: calc(100vh - 115px);
+}
+
 .duck-context-panel {
   flex: 0 0 var(--duck-panel-width);
   width: var(--duck-panel-width);

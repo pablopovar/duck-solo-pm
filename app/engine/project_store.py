@@ -10,7 +10,13 @@ SCHEMA_VERSION = 2
 
 
 def database_path(project_root: Path) -> Path:
-    return project_root / ".pocket" / "project.sqlite3"
+    canonical_root = project_root / ".duck"
+    legacy_root = project_root / ".pocket"
+
+    if canonical_root.exists() or not legacy_root.exists():
+        return canonical_root / "project.sqlite3"
+
+    return legacy_root / "project.sqlite3"
 
 
 @contextmanager
@@ -205,6 +211,44 @@ def list_activity(
         parameters.append(kind)
 
     parameters.append(limit)
+
+    with connection(project_root) as database:
+        rows = database.execute(
+            f"""
+            SELECT id, kind, title, body, url, completed, pinned,
+                   created_at, updated_at
+            FROM activity
+            WHERE {where}
+            ORDER BY sequence DESC
+            LIMIT ?
+            """,
+            parameters,
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def search_activity(
+    project_root: Path,
+    query: str,
+    *,
+    limit: int = 100,
+    kind: str | None = None,
+) -> list[dict[str, object]]:
+    cleaned = query.strip()
+
+    if not cleaned:
+        return []
+
+    where = "deleted_at IS NULL AND (title LIKE ? OR body LIKE ? OR url LIKE ?)"
+    pattern = f"%{cleaned}%"
+    parameters: list[object] = [pattern, pattern, pattern]
+
+    if kind is not None:
+        where += " AND kind = ?"
+        parameters.append(kind)
+
+    parameters.append(max(1, min(limit, 500)))
 
     with connection(project_root) as database:
         rows = database.execute(

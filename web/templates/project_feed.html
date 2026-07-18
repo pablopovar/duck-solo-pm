@@ -16,7 +16,7 @@
 </head>
 
 <body
-  class="duck-feed-page"
+  class="duck-feed-page{% if project_state.legacy or project_state.conflict %} duck-has-state-warning{% endif %}"
   data-project="{{ project }}"
 >
   <header class="duck-feed-topbar">
@@ -35,6 +35,28 @@
       <a href="/settings">♙ Settings</a>
     </nav>
   </header>
+
+  {% if project_state.conflict %}
+    <aside class="duck-state-warning" role="alert">
+      <strong>Duck state conflict:</strong>
+      both <code>.duck</code> and <code>.pocket</code> exist.
+      Duck is using <code>.duck</code>; resolve the old directory manually.
+    </aside>
+  {% elif project_state.legacy %}
+    <aside class="duck-state-warning" role="alert">
+      <span>
+        <strong>Legacy project state:</strong>
+        this project still uses <code>.pocket</code>.
+      </span>
+
+      <form
+        method="post"
+        action="/project/{{ quote(project, safe='') }}/migrate-to-duck"
+      >
+        <button type="submit">Migrate to .duck</button>
+      </form>
+    </aside>
+  {% endif %}
 
   <main
     id="duck-feed-layout"
