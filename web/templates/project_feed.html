@@ -22,13 +22,46 @@
   <header class="duck-feed-topbar">
     <a class="duck-feed-brand" href="/">
       <span aria-hidden="true">🦆</span>
-      <strong>Duck</strong>
+      <strong>{{ project_title }}</strong>
     </a>
 
     <nav class="duck-feed-navigation">
-      <a
-        href="/project/{{ quote(project, safe='') }}/settings"
-      >⚙ Project Settings</a>
+      <details class="duck-project-settings-menu">
+        <summary>⚙ Project Settings</summary>
+
+        <div class="duck-project-settings-popover">
+          <a
+            class="duck-project-settings-link"
+            href="/project/{{ quote(project, safe='') }}/settings"
+          >Open Project Settings</a>
+
+          <section class="duck-project-layout-settings">
+            <strong>Workspace layout</strong>
+
+            <div
+              class="duck-density-control"
+              role="group"
+              aria-label="Interface density"
+            >
+              <button
+                id="duck-density-decrease"
+                type="button"
+                title="Decrease density"
+              >−</button>
+              <span id="duck-density-label">Standard</span>
+              <button
+                id="duck-density-increase"
+                type="button"
+                title="Increase density"
+              >+</button>
+            </div>
+
+            <button id="duck-layout-equalize" type="button">
+              Equalize columns
+            </button>
+          </section>
+        </div>
+      </details>
 
       <span aria-hidden="true"></span>
 
@@ -118,6 +151,7 @@
           aria-expanded="false"
           aria-controls="duck-context-panel"
           title="Expand project context"
+          hidden
         >↔</button>
       </header>
 
@@ -171,26 +205,106 @@
         </form>
       </section>
 
-      <section class="duck-context-card">
-        <h2>↗ Quick links</h2>
+      <section class="duck-context-card duck-quick-links-card">
+        <header class="duck-context-card-header">
+          <h2>↗ Quick links</h2>
+          <button id="duck-quick-links-edit" type="button">Edit</button>
+        </header>
 
-        <ul class="duck-quick-links">
-          {% for link in quick_links %}
-            <li>
-              <a
-                href="{{ link.url }}"
-                {% if link.external %}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                {% endif %}
-              >
-                <span aria-hidden="true">{{ link.icon }}</span>
-                <span>{{ link.label }}</span>
-                <span aria-hidden="true">↗</span>
-              </a>
-            </li>
-          {% endfor %}
-        </ul>
+        <div id="duck-quick-links-display">
+          {% if quick_links %}
+            <ul class="duck-quick-links">
+              {% for link in quick_links %}
+                <li>
+                  <a
+                    href="{{ link.url }}"
+                    {% if link.external %}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    {% endif %}
+                  >
+                    <span aria-hidden="true">{{ link.icon or "↗" }}</span>
+                    <span>{{ link.label }}</span>
+                    <span aria-hidden="true">↗</span>
+                  </a>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="duck-context-empty">No Quick Links yet.</p>
+          {% endif %}
+        </div>
+
+        <div id="duck-quick-links-editor" hidden>
+          <div id="duck-quick-links-rows">
+            {% for link in quick_links %}
+              <form class="duck-quick-link-form" data-quick-link-id="{{ link.id }}">
+                <input
+                  name="label"
+                  type="text"
+                  maxlength="200"
+                  value="{{ link.label }}"
+                  aria-label="Link label"
+                  placeholder="Label"
+                  required
+                >
+                <input
+                  name="url"
+                  type="text"
+                  maxlength="2000"
+                  value="{{ link.url }}"
+                  aria-label="Link URL"
+                  placeholder="https://..."
+                  required
+                >
+                <input
+                  name="icon"
+                  type="text"
+                  maxlength="8"
+                  value="{{ link.icon }}"
+                  aria-label="Link icon"
+                  placeholder="Icon"
+                >
+                <div class="duck-quick-link-actions">
+                  <button type="submit">Save</button>
+                  <button type="button" data-delete-quick-link>Remove</button>
+                </div>
+              </form>
+            {% endfor %}
+          </div>
+
+          <form id="duck-quick-link-add" class="duck-quick-link-form">
+            <input
+              name="label"
+              type="text"
+              maxlength="200"
+              aria-label="New link label"
+              placeholder="New label"
+              required
+            >
+            <input
+              name="url"
+              type="text"
+              maxlength="2000"
+              aria-label="New link URL"
+              placeholder="https://..."
+              required
+            >
+            <input
+              name="icon"
+              type="text"
+              maxlength="8"
+              aria-label="New link icon"
+              placeholder="Icon"
+            >
+            <div class="duck-quick-link-actions">
+              <button type="submit">Add link</button>
+              <button id="duck-quick-links-done" type="button">Done</button>
+            </div>
+          </form>
+
+          <p id="duck-quick-links-feedback" aria-live="polite"></p>
+        </div>
       </section>
 
       <section class="duck-context-card duck-pinned-resources">
@@ -282,45 +396,8 @@
           data-column-action="expand"
           title="Bring Activity to front"
         >Activity</button>
-        <span class="duck-column-state-controls">
-          <button type="button" data-column-action="collapse" title="Collapse Activity" aria-label="Collapse Activity">-</button>
-          <button type="button" data-column-action="normal" title="Make all columns equal" aria-label="Make all columns equal">=</button>
-          <button type="button" data-column-action="expand" title="Focus Activity" aria-label="Focus Activity">+</button>
-        </span>
-        <button
-          class="duck-column-stack-drag"
-          type="button"
-          draggable="true"
-          aria-label="Drag collapsed column stack"
-          title="Drag this collapsed stack"
-        >S</button>
-      </nav>
 
-      <header class="duck-activity-header">
-        <div>
-          <h1>{{ project_title }}</h1>
-          <p>Project activity feed</p>
-        </div>
-
-        <div class="duck-feed-tools">
-          <div
-            class="duck-density-control"
-            role="group"
-            aria-label="Interface density"
-          >
-            <button
-              id="duck-density-decrease"
-              type="button"
-              title="Decrease density"
-            >−</button>
-            <span id="duck-density-label">Standard</span>
-            <button
-              id="duck-density-increase"
-              type="button"
-              title="Increase density"
-            >+</button>
-          </div>
-
+        <div class="duck-feed-tools duck-feed-tools-inline">
           <label
             class="duck-visually-hidden"
             for="duck-feed-filter"
@@ -341,16 +418,30 @@
             type="button"
             aria-controls="duck-chat-panel"
             aria-expanded="false"
-          >Ask project</button>
+            hidden
+          ></button>
         </div>
-      </header>
+
+        <span class="duck-column-state-controls">
+          <button type="button" data-column-action="collapse" title="Collapse Activity" aria-label="Collapse Activity">-</button>
+          <button type="button" data-column-action="normal" title="Make all columns equal" aria-label="Make all columns equal">=</button>
+          <button type="button" data-column-action="expand" title="Focus Activity" aria-label="Focus Activity">+</button>
+        </span>
+        <button
+          class="duck-column-stack-drag"
+          type="button"
+          draggable="true"
+          aria-label="Drag collapsed column stack"
+          title="Drag this collapsed stack"
+        >S</button>
+      </nav>
 
       <div class="duck-feed-scroll">
         <div class="duck-feed-list">
           {% if feed_items %}
             {% for item in feed_items %}
               <article
-                class="duck-feed-item duck-feed-item-{{ item.type }}"
+                class="duck-feed-item duck-feed-item-{{ item.type }}{% if item.type == 'todo' and item.get('completed', False) %} is-completed{% endif %}"
                 data-feed-type="{{ item.type }}"
               >
                 <div class="duck-feed-icon" aria-hidden="true">
@@ -383,19 +474,68 @@
                   </summary>
 
                   <div class="duck-feed-card-content">
-                    {% if item.get("url", "") %}
-                      <p class="duck-feed-body">
+                    <div data-activity-display>
+                      {% if item.get("url", "") %}
+                        <p class="duck-feed-body">
                         <a
                           href="{{ item.url }}"
                           target="_blank"
                           rel="noopener noreferrer"
                         >{{ item.title }}</a>
-                      </p>
-                    {% elif item.body %}
-                      <p class="duck-feed-body">{{ item.body }}</p>
+                        </p>
+                      {% elif item.body %}
+                        <p class="duck-feed-body">{{ item.body }}</p>
+                      {% endif %}
+                    </div>
+
+                    {% if item.type == "todo" and item.get("id", "") %}
+                      <form
+                        class="duck-todo-edit-form"
+                        data-todo-edit-form
+                        data-activity-id="{{ item.id }}"
+                        hidden
+                      >
+                        <label>
+                          Title
+                          <input
+                            name="title"
+                            type="text"
+                            maxlength="200"
+                            value="{{ item.title }}"
+                            required
+                          >
+                        </label>
+                        <label>
+                          Details
+                          <textarea name="body" rows="5">{{ item.body }}</textarea>
+                        </label>
+                        <div class="duck-todo-edit-actions">
+                          <button type="button" data-cancel-todo-edit>Cancel</button>
+                          <button type="submit">Save Todo</button>
+                        </div>
+                      </form>
                     {% endif %}
 
                     <div class="duck-feed-card-actions">
+                      {% if item.type == "todo" and item.get("id", "") %}
+                        <button
+                          type="button"
+                          data-edit-todo
+                        >Edit</button>
+                        <button
+                          type="button"
+                          data-toggle-todo
+                          data-activity-id="{{ item.id }}"
+                          data-completed="{{ 'true' if item.get('completed', False) else 'false' }}"
+                        >
+                          {% if item.get("completed", False) %}
+                            Reopen
+                          {% else %}
+                            Close
+                          {% endif %}
+                        </button>
+                      {% endif %}
+
                       {% if item.type == "note" and item.get("id", "") %}
                         <button
                           type="button"
@@ -651,26 +791,25 @@
       </nav>
 
       <header class="duck-chat-header">
-        <div>
-          <strong>Ask this project</strong>
-          <span>Can search and read every readable project file.</span>
+        <strong>Chat</strong>
+
+        <div class="duck-chat-toolbar">
+          <label class="duck-visually-hidden" for="duck-chat-model">
+            Model
+          </label>
+          <select id="duck-chat-model" disabled>
+            <option value="">Loading models...</option>
+          </select>
+
+          <button id="duck-chat-clear" type="button">Clear</button>
+          <button
+            id="duck-chat-close"
+            type="button"
+            aria-label="Close project chat"
+            title="Close project chat"
+          >&times;</button>
         </div>
-
-        <button
-          id="duck-chat-close"
-          type="button"
-          aria-label="Close project chat"
-        >x</button>
       </header>
-
-      <div class="duck-chat-toolbar">
-        <label for="duck-chat-model">Model</label>
-        <select id="duck-chat-model" disabled>
-          <option value="">Loading models...</option>
-        </select>
-
-        <button id="duck-chat-clear" type="button">Clear</button>
-      </div>
 
       <div
         id="duck-chat-messages"
@@ -688,7 +827,7 @@
         </label>
         <textarea
           id="duck-chat-input"
-          rows="4"
+          rows="2"
           maxlength="12000"
           placeholder="Ask the project..."
         ></textarea>

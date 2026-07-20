@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterator
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def database_path(project_root: Path) -> Path:
@@ -91,6 +91,19 @@ def ensure_schema(project_root: Path) -> None:
 
             CREATE INDEX IF NOT EXISTS activity_kind_visible
                 ON activity(kind, deleted_at, sequence DESC);
+
+            CREATE TABLE IF NOT EXISTS quick_links (
+                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                id TEXT NOT NULL UNIQUE,
+                label TEXT NOT NULL,
+                url TEXT NOT NULL,
+                icon TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS quick_links_sequence
+                ON quick_links(sequence ASC);
 
             CREATE TABLE IF NOT EXISTS project_chat_messages (
                 sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -361,6 +374,157 @@ def set_pinned(
               AND kind IN ('link', 'file', 'document')
             """,
             (int(pinned), updated_at, activity_id),
+        )
+
+    return cursor.rowcount == 1
+
+
+def update_todo(
+    project_root: Path,
+    activity_id: str,
+    title: str,
+    body: str,
+    updated_at: str,
+) -> bool:
+    with connection(project_root) as database:
+        cursor = database.execute(
+            """
+            UPDATE activity
+            SET title = ?, body = ?, updated_at = ?
+            WHERE id = ?
+              AND kind = 'todo'
+              AND deleted_at IS NULL
+            """,
+            (title, body, updated_at, activity_id),
+        )
+
+    return cursor.rowcount == 1
+
+
+def set_todo_completed(
+    project_root: Path,
+    activity_id: str,
+    completed: bool,
+    updated_at: str,
+) -> bool:
+    with connection(project_root) as database:
+        cursor = database.execute(
+            """
+            UPDATE activity
+            SET completed = ?, updated_at = ?
+            WHERE id = ?
+              AND kind = 'todo'
+              AND deleted_at IS NULL
+            """,
+            (int(completed), updated_at, activity_id),
+        )
+
+    return cursor.rowcount == 1
+
+
+def list_quick_links(project_root: Path) -> list[dict[str, object]]:
+    with connection(project_root) as database:
+        rows = database.execute(
+            """
+            SELECT id, label, url, icon, created_at, updated_at
+            FROM quick_links
+            ORDER BY sequence ASC
+            """
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def create_quick_link(
+    project_root: Path,
+    record: dict[str, object],
+) -> None:
+    with connection(project_root) as database:
+        database.execute(
+            """
+            INSERT INTO quick_links(
+                id, label, url, icon, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(record["id"]),
+                str(record["label"]),
+                str(record["url"]),
+                str(record.get("icon", "")),
+                str(record["created_at"]),
+                str(record["updated_at"]),
+            ),
+        )
+
+
+def initialize_quick_links(
+    project_root: Path,
+    records: list[dict[str, object]],
+) -> None:
+    """Seed legacy/configured links once, in the same transaction as the marker."""
+    with connection(project_root) as database:
+        initialized = database.execute(
+            "SELECT value FROM store_meta WHERE key = 'quick_links_initialized'"
+        ).fetchone()
+
+        if initialized is not None and str(initialized["value"]) == "1":
+            return
+
+        for record in records:
+            database.execute(
+                """
+                INSERT INTO quick_links(
+                    id, label, url, icon, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(record["id"]),
+                    str(record["label"]),
+                    str(record["url"]),
+                    str(record.get("icon", "")),
+                    str(record["created_at"]),
+                    str(record["updated_at"]),
+                ),
+            )
+
+        database.execute(
+            """
+            INSERT INTO store_meta(key, value)
+            VALUES ('quick_links_initialized', '1')
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """
+        )
+
+
+def update_quick_link(
+    project_root: Path,
+    link_id: str,
+    label: str,
+    url: str,
+    icon: str,
+    updated_at: str,
+) -> bool:
+    with connection(project_root) as database:
+        cursor = database.execute(
+            """
+            UPDATE quick_links
+            SET label = ?, url = ?, icon = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (label, url, icon, updated_at, link_id),
+        )
+
+    return cursor.rowcount == 1
+
+
+def delete_quick_link(
+    project_root: Path,
+    link_id: str,
+) -> bool:
+    with connection(project_root) as database:
+        cursor = database.execute(
+            "DELETE FROM quick_links WHERE id = ?",
+            (link_id,),
         )
 
     return cursor.rowcount == 1

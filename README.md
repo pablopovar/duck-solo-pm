@@ -1,5 +1,7 @@
 # Duck SoloPM
 
+> I made Duck! to get quick clarity and fast pivoting across tons of ongoing projects—to fend off cognitive burn.
+
 **A local-first project workspace built for one person.**
 
 Duck gives a solo operator one place to see a project's context, record what happened, keep the next work visible, reach its resources, and ask questions using evidence Duck can retrieve from the project.
@@ -11,6 +13,8 @@ Duck starts with a simpler requirement: open a project and understand it quickly
 ## Why Duck exists
 
 Projects rarely live in one application. Their working reality is spread across folders, repositories, documents, notes, links, browser tabs, terminals, and conversations.
+
+The recurring cost is reorientation: finding the right project, recovering its context, reconstructing what changed, and locating the next action before work can resume. Duck exists to reduce that accumulated cognitive burn.
 
 Duck keeps the Local Folder as the project and adds a compact management layer around it:
 
@@ -334,7 +338,7 @@ These are current implementation boundaries, not claims about Duck's eventual sc
 
 ## Name
 
-The earlier working name was **Door to Pocket**. The decided name is **Duck SoloPM**—from *“Fuck, I don't have a name for this.”*
+The practical origin of Duck is the need for quick clarity and fast pivoting across tons of ongoing projects. The earlier working name was **Door to Pocket**. The decided name is **Duck SoloPM**—from *“Fuck, I don't have a name for this.”*
 
 ## License
 

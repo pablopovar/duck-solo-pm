@@ -1215,6 +1215,103 @@ body.duck-composer-open {
   white-space: nowrap;
 }
 
+/* Editable Quick Links and Todos */
+
+#duck-quick-links-display[hidden],
+#duck-quick-links-editor[hidden],
+.duck-todo-edit-form[hidden],
+[data-activity-display][hidden] {
+  display: none !important;
+}
+
+#duck-quick-links-editor,
+#duck-quick-links-rows {
+  display: grid;
+  gap: 10px;
+}
+
+.duck-quick-link-form {
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid var(--duck-border);
+  border-radius: 7px;
+  background: var(--duck-soft);
+}
+
+.duck-quick-link-form input,
+.duck-todo-edit-form input,
+.duck-todo-edit-form textarea {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--duck-border);
+  border-radius: 5px;
+  color: var(--duck-dark);
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.duck-quick-link-actions,
+.duck-todo-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.duck-quick-link-actions button,
+.duck-todo-edit-actions button {
+  padding: 5px 8px;
+  border: 1px solid var(--duck-border);
+  border-radius: 5px;
+  color: var(--duck-gunmetal);
+  background: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#duck-quick-link-add {
+  margin-top: 12px;
+  border-color: #9eb0bd;
+}
+
+#duck-quick-links-feedback {
+  min-height: 15px;
+  margin: 7px 0 0;
+  color: #b42318;
+  font-size: 11px;
+}
+
+.duck-todo-edit-form {
+  display: grid;
+  gap: 8px;
+}
+
+.duck-todo-edit-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--duck-gunmetal);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.duck-todo-edit-form textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.duck-feed-card-actions {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.duck-feed-item-todo.is-completed .duck-feed-summary-main strong,
+.duck-feed-item-todo.is-completed .duck-feed-preview {
+  opacity: 0.68;
+  text-decoration: line-through;
+}
+
 body[data-density="spacious"] {
   --duck-density-panel-padding: 28px;
   --duck-density-card-padding: 18px;
@@ -1838,5 +1935,483 @@ body[data-density="compact"] .duck-top-todos li {
   .duck-context-toggle {
     display: inline-grid;
     place-items: center;
+  }
+}
+
+/* ==========================================================
+   DUCK FOCUSED CHAT WORKSPACE
+   ========================================================== */
+
+body.duck-chat-focused {
+  overflow: hidden;
+}
+
+body.duck-chat-focused .duck-feed-topbar {
+  display: none;
+}
+
+body.duck-chat-focused .duck-feed-layout {
+  height: 100vh;
+}
+
+body.duck-chat-focused.duck-has-state-warning .duck-feed-layout {
+  height: calc(100vh - 47px);
+}
+
+body.duck-chat-focused
+  .duck-chat-panel[data-column-state="expanded"]
+  > .duck-column-chrome {
+  display: none;
+}
+
+.duck-chat-header {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px 6px 14px;
+}
+
+.duck-chat-header > strong {
+  flex: 0 0 auto;
+  font-size: 14px;
+}
+
+.duck-chat-header > .duck-chat-toolbar {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(140px, 360px) auto auto;
+  justify-content: end;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.duck-chat-header .duck-chat-toolbar select {
+  min-height: 34px;
+  padding: 5px 8px;
+}
+
+.duck-chat-header .duck-chat-toolbar button {
+  width: auto;
+  height: 34px;
+  min-height: 34px;
+  padding: 5px 9px;
+}
+
+.duck-chat-header #duck-chat-close {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 19px;
+  line-height: 1;
+}
+
+body.duck-chat-focused .duck-chat-header {
+  flex: 0 0 48px;
+}
+
+body.duck-chat-focused .duck-chat-messages {
+  gap: 10px;
+  padding: 14px 18px;
+}
+
+body.duck-chat-focused .duck-chat-message {
+  padding: 9px 11px;
+}
+
+body.duck-chat-focused .duck-chat-message-assistant {
+  width: min(100%, 1100px);
+  max-width: 100%;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+body.duck-chat-focused .duck-chat-message-user {
+  max-width: min(76%, 760px);
+}
+
+.duck-chat-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "input send"
+    "status status";
+  align-items: stretch;
+  gap: 5px 8px;
+  padding: 8px 12px 7px;
+}
+
+.duck-chat-form textarea {
+  grid-area: input;
+  min-height: 48px;
+  max-height: 160px;
+  resize: none;
+  overflow-y: auto;
+  padding: 11px 12px;
+}
+
+.duck-chat-submit-row {
+  display: contents;
+}
+
+#duck-chat-status {
+  grid-area: status;
+  min-height: 13px;
+  padding-left: 2px;
+}
+
+#duck-chat-send {
+  grid-area: send;
+  min-width: 78px;
+  min-height: 48px;
+  padding: 8px 14px;
+}
+
+body.duck-chat-focused .duck-chat-form {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 680px) {
+  .duck-chat-header {
+    gap: 7px;
+    padding-left: 9px;
+  }
+
+  .duck-chat-header > strong {
+    display: none;
+  }
+
+  .duck-chat-header > .duck-chat-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  body.duck-chat-focused .duck-chat-messages {
+    padding: 10px 9px;
+  }
+
+  body.duck-chat-focused .duck-chat-message-user {
+    max-width: 92%;
+  }
+
+  .duck-chat-form {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+}
+
+/* ==========================================================
+   DUCK COMPACT PROJECT HEADER AND ACTIVITY TOOLBAR
+   ========================================================== */
+
+.duck-feed-topbar {
+  height: 46px;
+  padding: 0 16px;
+}
+
+.duck-feed-brand {
+  min-width: 0;
+  gap: 8px;
+  font-size: 20px;
+}
+
+.duck-feed-brand span {
+  flex: 0 0 auto;
+  font-size: 24px;
+}
+
+.duck-feed-brand strong {
+  max-width: min(52vw, 560px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.duck-feed-navigation {
+  gap: 14px;
+  font-size: 13px;
+}
+
+.duck-feed-navigation > span {
+  height: 22px;
+}
+
+.duck-feed-layout {
+  height: calc(100vh - 46px);
+}
+
+.duck-has-state-warning .duck-feed-layout {
+  height: calc(100vh - 93px);
+}
+
+/* Column arrangement is no longer edited in the live workspace.
+   The focus labels and collapsed rails remain available. */
+.duck-column-drag,
+.duck-column-state-controls,
+.duck-column-stack-drag {
+  display: none !important;
+}
+
+.duck-column-chrome {
+  min-height: 40px;
+  gap: 7px;
+  padding: 4px 8px;
+}
+
+.duck-workspace-column:not([data-column-state="collapsed"])
+  > .duck-column-chrome
+  > .duck-column-focus {
+  min-width: auto;
+  flex: 0 0 auto;
+  padding-right: 7px;
+  padding-left: 7px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.duck-feed-tools-inline {
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.duck-feed-tools-inline button {
+  height: 32px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.duck-feed-tools-inline select {
+  width: auto;
+  min-width: 124px;
+  height: 32px;
+  padding: 4px 30px 4px 9px;
+  font-size: 12px;
+}
+
+.duck-feed-tools-inline .duck-density-control button {
+  min-width: 30px;
+  padding: 4px 8px;
+}
+
+.duck-feed-tools-inline .duck-density-control span {
+  min-width: 60px;
+  font-size: 10px;
+}
+
+.duck-feed-scroll {
+  padding-top: 10px;
+}
+
+@media (max-width: 680px) {
+  .duck-feed-topbar {
+    height: 44px;
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .duck-feed-brand {
+    font-size: 16px;
+  }
+
+  .duck-feed-brand span {
+    font-size: 21px;
+  }
+
+  .duck-feed-brand strong {
+    max-width: 40vw;
+  }
+
+  .duck-feed-navigation {
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .duck-feed-navigation > span {
+    display: none;
+  }
+
+  .duck-feed-layout {
+    height: calc(100vh - 44px);
+  }
+
+  .duck-feed-tools-inline .duck-density-control span {
+    display: none;
+  }
+
+  .duck-feed-tools-inline select {
+    min-width: 92px;
+    max-width: 108px;
+  }
+
+  .duck-feed-tools-inline button {
+    padding-right: 7px;
+    padding-left: 7px;
+  }
+}
+
+/* ==========================================================
+   DUCK CLEAN TOOLBAR AND RESIZABLE COLUMNS
+   ========================================================== */
+
+.duck-project-settings-menu {
+  position: relative;
+}
+
+.duck-project-settings-menu > summary {
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+}
+
+.duck-project-settings-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.duck-project-settings-popover {
+  position: absolute;
+  z-index: 120;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 230px;
+  padding: 10px;
+  border: 1px solid #9eacb5;
+  border-radius: 8px;
+  color: var(--duck-dark);
+  background: #fff;
+  box-shadow: 0 14px 36px rgb(20 35 44 / 24%);
+}
+
+.duck-project-settings-link {
+  display: block;
+  padding: 8px 9px;
+  border-radius: 6px;
+  color: var(--duck-blue);
+  text-decoration: none;
+}
+
+.duck-project-settings-link:hover {
+  background: #f2f5f7;
+}
+
+.duck-project-layout-settings {
+  display: grid;
+  gap: 9px;
+  margin-top: 7px;
+  padding: 10px 9px 2px;
+  border-top: 1px solid var(--duck-border);
+}
+
+.duck-project-layout-settings > strong {
+  color: #586b77;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.duck-project-layout-settings .duck-density-control {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.duck-project-layout-settings .duck-density-control span {
+  flex: 1 1 auto;
+}
+
+#duck-layout-equalize {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--duck-border);
+  border-radius: 6px;
+  color: var(--duck-gunmetal);
+  background: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#duck-layout-equalize:hover {
+  background: #f2f5f7;
+}
+
+/* The activity filter remains operational. Density and project-chat entry
+   no longer compete for space in the Activity label row. */
+.duck-feed-tools-inline {
+  flex: 0 1 auto;
+}
+
+.duck-feed-tools-inline select {
+  min-width: 132px;
+}
+
+.duck-workspace-column[data-column-state="collapsed"]
+  .duck-feed-tools-inline {
+  display: none !important;
+}
+
+.duck-context-toggle[hidden],
+.duck-chat-toggle[hidden] {
+  display: none !important;
+}
+
+.duck-column-resizer {
+  position: relative;
+  z-index: 35;
+  width: 7px;
+  min-width: 7px;
+  flex: 0 0 7px;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.duck-column-resizer::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  content: "";
+  background: #b9c5cc;
+}
+
+.duck-column-resizer:hover::before,
+body.duck-is-resizing-columns .duck-column-resizer::before {
+  left: 2px;
+  width: 3px;
+  background: var(--duck-orange);
+}
+
+.duck-column-resizer[hidden] {
+  display: none !important;
+}
+
+body.duck-is-resizing-columns,
+body.duck-is-resizing-columns * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.duck-workspace-column[data-column-state="normal"].duck-column-resized {
+  width: var(--duck-column-size) !important;
+  flex: 0 0 var(--duck-column-size) !important;
+}
+
+@media (max-width: 760px) {
+  .duck-column-resizer {
+    display: none !important;
+  }
+
+  .duck-project-settings-popover {
+    position: fixed;
+    top: 48px;
+    right: 8px;
+    width: min(260px, calc(100vw - 16px));
   }
 }

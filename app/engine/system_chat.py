@@ -145,6 +145,52 @@ def _tool_definitions() -> list[dict[str, object]]:
         {
             "type": "function",
             "function": {
+                "name": "summarize_open_todos",
+                "description": (
+                    "Load incomplete Todos across all active projects, or one "
+                    "project when project is supplied, so you can summarize "
+                    "open work, priorities, and next actions."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "project": project_property,
+                        "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 500,
+                            "default": 500,
+                        },
+                    },
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "summarize_notes",
+                "description": (
+                    "Load Notes across all active projects, or one project "
+                    "when project is supplied, so you can summarize themes, "
+                    "decisions, context, and unresolved questions."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "project": project_property,
+                        "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 500,
+                            "default": 500,
+                        },
+                    },
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "search_project_activity",
                 "description": (
                     "Search titles, bodies, and URLs across Duck Activity. "
@@ -372,6 +418,64 @@ def _execute_tool(
 
         return _json(results[:limit])
 
+    if name in {"summarize_open_todos", "summarize_notes"}:
+        selected_name = str(arguments.get("project", "")).strip()
+        limit = _integer_argument(arguments, "limit", 500, 1, 500)
+        selected_projects = catalog
+
+        if selected_name:
+            selected = projects.get(selected_name.casefold())
+
+            if selected is None:
+                return f"Unknown project: {selected_name}"
+
+            selected_projects = [selected]
+
+        results: list[dict[str, object]] = []
+
+        for selected in selected_projects:
+            if not selected.configured:
+                continue
+
+            accessed_projects.add(selected.name)
+            remaining = limit - len(results)
+
+            if name == "summarize_open_todos":
+                records = project_store.open_todos(
+                    selected.root,
+                    limit=remaining,
+                )
+            else:
+                records = project_store.list_activity(
+                    selected.root,
+                    limit=remaining,
+                    kind="note",
+                )
+
+            results.extend(
+                _activity_payload(selected, record) for record in records
+            )
+
+            if len(results) >= limit:
+                break
+
+        result_key = (
+            "open_todos" if name == "summarize_open_todos" else "notes"
+        )
+        instruction = (
+            "Summarize these incomplete Todos for the user."
+            if name == "summarize_open_todos"
+            else "Summarize these Notes for the user."
+        )
+        return _json(
+            {
+                "scope": selected_name or "all active projects",
+                "instruction": instruction,
+                "count": len(results),
+                result_key: results,
+            }
+        )
+
     project = _selected_project(projects, arguments)
 
     if project is None:
@@ -470,10 +574,12 @@ def complete_system_chat(
     if mentioned_project is not None:
         inspection_requirement = (
             "\n\nThe current question unambiguously identifies the project "
-            f"{mentioned_project.title!r}. Before answering, you MUST call "
-            "get_project_overview with project="
-            f"{mentioned_project.name!r}. A list_projects result alone is not "
-            "a sufficient inspection."
+            f"{mentioned_project.title!r}. Before answering, you MUST call a "
+            "project-specific inspection tool with project="
+            f"{mentioned_project.name!r}. Use summarize_open_todos or "
+            "summarize_notes when that directly answers the request; otherwise "
+            "use get_project_overview. A list_projects result alone is not a "
+            "sufficient inspection."
         )
 
     system_message = (
@@ -555,11 +661,10 @@ def complete_system_chat(
                                 "role": "system",
                                 "content": (
                                     "Do not finalize that draft: it is not backed "
-                                    "by a project inspection. Call "
-                                    "get_project_overview now with project="
+                                    "by a project inspection. Call the relevant "
+                                    "project-specific tool now with project="
                                     f"{mentioned_project.name!r}, then answer the "
-                                    "user from the returned About profile and "
-                                    "project data."
+                                    "user from the returned project data."
                                 ),
                             }
                         )
@@ -592,7 +697,11 @@ def complete_system_chat(
                         accessed_projects,
                     )
 
-                    if name == "get_project_overview":
+                    if name in {
+                        "get_project_overview",
+                        "summarize_open_todos",
+                        "summarize_notes",
+                    }:
                         selected = _selected_project(
                             _project_map(catalog),
                             arguments,

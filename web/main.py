@@ -123,6 +123,21 @@ class ActivityPinUpdate(BaseModel):
     pinned: bool = True
 
 
+class QuickLinkUpdate(BaseModel):
+    label: str = ""
+    url: str = ""
+    icon: str = ""
+
+
+class TodoUpdate(BaseModel):
+    title: str = ""
+    body: str = ""
+
+
+class TodoCompletionUpdate(BaseModel):
+    completed: bool = True
+
+
 class NoteFileConversion(BaseModel):
     path: str = ""
 
@@ -1107,6 +1122,22 @@ def _ensure_project_store(project: str) -> Path:
         all_settings,
     )
 
+    timestamp = _quick_entry_timestamp()
+    project_store.initialize_quick_links(
+        root,
+        [
+            {
+                "id": str(uuid4()),
+                "label": str(link["label"]),
+                "url": str(link["url"]),
+                "icon": str(link.get("icon", "")),
+                "created_at": timestamp,
+                "updated_at": timestamp,
+            }
+            for link in _project_quick_links(project, all_settings)
+        ],
+    )
+
     if project_store.meta_value(
         root,
         "legacy_activity_imported",
@@ -1168,6 +1199,23 @@ def _stored_feed_items(
     return items
 
 
+def _stored_quick_links(
+    root: Path,
+) -> list[dict[str, object]]:
+    return [
+        {
+            "id": str(link["id"]),
+            "label": str(link["label"]),
+            "url": str(link["url"]),
+            "icon": str(link["icon"]),
+            "external": str(link["url"]).startswith(
+                ("https://", "http://")
+            ),
+        }
+        for link in project_store.list_quick_links(root)
+    ]
+
+
 def project_feed_context(
     project: str,
 ) -> dict[str, object]:
@@ -1183,10 +1231,7 @@ def project_feed_context(
             "why": profile.get("why", ""),
             "class": profile.get("class", ""),
         },
-        "quick_links": _project_quick_links(
-            project,
-            settings,
-        ),
+        "quick_links": _stored_quick_links(root),
         "pinned_resources": [
             {
                 "id": str(resource["id"]),
@@ -1830,6 +1875,121 @@ def set_activity_resource_pin(
     }
 
 
+def _validated_quick_link(
+    update: QuickLinkUpdate,
+) -> tuple[str, str, str]:
+    label = update.label.strip()
+    url = update.url.strip()
+    icon = update.icon.strip()
+
+    if not label:
+        raise HTTPException(
+            status_code=400,
+            detail="A link label is required",
+        )
+
+    if len(label) > 200:
+        raise HTTPException(
+            status_code=400,
+            detail="Link labels are limited to 200 characters",
+        )
+
+    if not url:
+        raise HTTPException(
+            status_code=400,
+            detail="A link URL is required",
+        )
+
+    if len(url) > 2000:
+        raise HTTPException(
+            status_code=400,
+            detail="Link URLs are limited to 2,000 characters",
+        )
+
+    if not url.startswith(("http://", "https://", "pocket-open://", "/")):
+        raise HTTPException(
+            status_code=400,
+            detail="Use an http, https, pocket-open, or Duck-relative URL",
+        )
+
+    if len(icon) > 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Link icons are limited to 8 characters",
+        )
+
+    return label, url, icon
+
+
+@app.post("/api/projects/{project}/quick-links")
+def create_project_quick_link(
+    project: str,
+    update: QuickLinkUpdate,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+    root = _ensure_project_store(project)
+    label, url, icon = _validated_quick_link(update)
+    timestamp = _quick_entry_timestamp()
+    link_id = str(uuid4())
+    project_store.create_quick_link(
+        root,
+        {
+            "id": link_id,
+            "label": label,
+            "url": url,
+            "icon": icon,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        },
+    )
+    return {"saved": True, "id": link_id}
+
+
+@app.put("/api/projects/{project}/quick-links/{link_id}")
+def update_project_quick_link(
+    project: str,
+    link_id: str,
+    update: QuickLinkUpdate,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+    root = _ensure_project_store(project)
+    label, url, icon = _validated_quick_link(update)
+    saved = project_store.update_quick_link(
+        root,
+        link_id,
+        label,
+        url,
+        icon,
+        _quick_entry_timestamp(),
+    )
+
+    if not saved:
+        raise HTTPException(
+            status_code=404,
+            detail="Quick Link not found",
+        )
+
+    return {"saved": True, "id": link_id}
+
+
+@app.delete("/api/projects/{project}/quick-links/{link_id}")
+def delete_project_quick_link(
+    project: str,
+    link_id: str,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+    root = _ensure_project_store(project)
+    deleted = project_store.delete_quick_link(root, link_id)
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail="Quick Link not found",
+        )
+
+    return {"saved": True, "deleted": True, "id": link_id}
+
+
 @app.post(
     "/api/projects/{project}/quick-entry",
 )
@@ -1908,6 +2068,73 @@ def add_quick_entry(
             .relative_to(root)
             .as_posix()
         ),
+    }
+
+
+@app.put("/api/projects/{project}/todos/{todo_id}")
+def update_project_todo(
+    project: str,
+    todo_id: str,
+    update: TodoUpdate,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+    title = update.title.strip()
+
+    if not title:
+        raise HTTPException(
+            status_code=400,
+            detail="A Todo title is required",
+        )
+
+    if len(title) > 200:
+        raise HTTPException(
+            status_code=400,
+            detail="Todo titles are limited to 200 characters",
+        )
+
+    root = _ensure_project_store(project)
+    saved = project_store.update_todo(
+        root,
+        todo_id,
+        title,
+        update.body.strip(),
+        _quick_entry_timestamp(),
+    )
+
+    if not saved:
+        raise HTTPException(
+            status_code=404,
+            detail="Todo not found",
+        )
+
+    return {"saved": True, "id": todo_id}
+
+
+@app.post("/api/projects/{project}/todos/{todo_id}/completion")
+def set_project_todo_completion(
+    project: str,
+    todo_id: str,
+    update: TodoCompletionUpdate,
+) -> dict[str, object]:
+    ensure_project_configured(project)
+    root = _ensure_project_store(project)
+    saved = project_store.set_todo_completed(
+        root,
+        todo_id,
+        update.completed,
+        _quick_entry_timestamp(),
+    )
+
+    if not saved:
+        raise HTTPException(
+            status_code=404,
+            detail="Todo not found",
+        )
+
+    return {
+        "saved": True,
+        "id": todo_id,
+        "completed": update.completed,
     }
 
 

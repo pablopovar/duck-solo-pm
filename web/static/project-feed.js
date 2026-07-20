@@ -91,6 +91,29 @@
   const aboutWhy = document.getElementById('duck-about-why');
   const aboutClass = document.getElementById('duck-about-class');
   const aboutFeedback = document.getElementById('duck-about-feedback');
+  const quickLinksEdit = document.getElementById('duck-quick-links-edit');
+  const quickLinksDisplay = document.getElementById('duck-quick-links-display');
+  const quickLinksEditor = document.getElementById('duck-quick-links-editor');
+  const quickLinksDone = document.getElementById('duck-quick-links-done');
+  const quickLinksFeedback = document.getElementById(
+    'duck-quick-links-feedback'
+  );
+  const quickLinkAdd = document.getElementById('duck-quick-link-add');
+  const quickLinkForms = Array.from(
+    document.querySelectorAll('.duck-quick-link-form[data-quick-link-id]')
+  );
+  const editTodoButtons = Array.from(
+    document.querySelectorAll('[data-edit-todo]')
+  );
+  const toggleTodoButtons = Array.from(
+    document.querySelectorAll('[data-toggle-todo]')
+  );
+  const todoEditForms = Array.from(
+    document.querySelectorAll('[data-todo-edit-form]')
+  );
+  const cancelTodoEditButtons = Array.from(
+    document.querySelectorAll('[data-cancel-todo-edit]')
+  );
   const densityDecrease = document.getElementById(
     'duck-density-decrease'
   );
@@ -282,6 +305,11 @@
   function syncColumnInterface() {
     updateCollapsedStacks();
     const chatState = chatPanel.dataset.columnState;
+
+    document.body.classList.toggle(
+      'duck-chat-focused',
+      chatState === 'expanded'
+    );
 
     toggle.setAttribute(
       'aria-expanded',
@@ -581,6 +609,18 @@
     chatStatus.classList.toggle('is-error', isError);
   }
 
+  function resizeChatInput() {
+    if (!chatInput) {
+      return;
+    }
+
+    chatInput.style.height = 'auto';
+    chatInput.style.height = `${Math.min(
+      chatInput.scrollHeight,
+      160
+    )}px`;
+  }
+
   function createChatMessage(message) {
     const article = document.createElement('article');
     const role = message.role === 'assistant' ? 'Duck' : 'You';
@@ -780,6 +820,7 @@
       }
 
       chatInput.value = '';
+      resizeChatInput();
       const context = result.context || {};
       const accessed = Array.isArray(context.accessed_files)
         ? context.accessed_files.length
@@ -813,6 +854,7 @@
   }
 
   if (chatInput) {
+    chatInput.addEventListener('input', resizeChatInput);
     chatInput.addEventListener('keydown', (event) => {
       if (
         event.key === 'Enter'
@@ -822,6 +864,7 @@
         submitChatMessage();
       }
     });
+    resizeChatInput();
   }
 
   if (chatClear) {
@@ -1337,6 +1380,306 @@
     }
   }
 
+  function setQuickLinksEditing(editing) {
+    if (!quickLinksDisplay || !quickLinksEditor || !quickLinksEdit) {
+      return;
+    }
+
+    quickLinksDisplay.hidden = editing;
+    quickLinksEditor.hidden = !editing;
+    quickLinksEdit.hidden = editing;
+
+    if (editing) {
+      const firstInput = quickLinksEditor.querySelector('input');
+
+      if (firstInput) {
+        firstInput.focus();
+      }
+    }
+  }
+
+  function quickLinkPayload(form) {
+    const data = new FormData(form);
+    return {
+      label: String(data.get('label') || '').trim(),
+      url: String(data.get('url') || '').trim(),
+      icon: String(data.get('icon') || '').trim(),
+    };
+  }
+
+  async function saveQuickLink(form, linkId = '') {
+    if (!project) {
+      return;
+    }
+
+    const submit = form.querySelector('button[type="submit"]');
+
+    if (submit) {
+      submit.disabled = true;
+      submit.textContent = linkId ? 'Saving...' : 'Adding...';
+    }
+
+    if (quickLinksFeedback) {
+      quickLinksFeedback.textContent = linkId
+        ? 'Saving Quick Link...'
+        : 'Adding Quick Link...';
+    }
+
+    try {
+      const suffix = linkId
+        ? `/${encodeURIComponent(linkId)}`
+        : '';
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(project)}/quick-links${suffix}`,
+        {
+          method: linkId ? 'PUT' : 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(quickLinkPayload(form)),
+        }
+      );
+      let result = {};
+
+      try {
+        result = await response.json();
+      } catch (_error) {
+        result = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(result.detail || 'The Quick Link could not be saved.');
+      }
+
+      window.location.reload();
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : 'The Quick Link could not be saved.';
+
+      if (quickLinksFeedback) {
+        quickLinksFeedback.textContent = message;
+      }
+
+      if (submit) {
+        submit.disabled = false;
+        submit.textContent = linkId ? 'Save' : 'Add link';
+      }
+    }
+  }
+
+  async function deleteQuickLink(form) {
+    const linkId = form.dataset.quickLinkId || '';
+    const labelInput = form.querySelector('[name="label"]');
+    const label = labelInput ? labelInput.value.trim() : 'this link';
+
+    if (!linkId || !project || !window.confirm(`Remove "${label}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(project)}/quick-links/${
+          encodeURIComponent(linkId)
+        }`,
+        {method: 'DELETE'}
+      );
+      let result = {};
+
+      try {
+        result = await response.json();
+      } catch (_error) {
+        result = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(result.detail || 'The Quick Link could not be removed.');
+      }
+
+      window.location.reload();
+    } catch (error) {
+      if (quickLinksFeedback) {
+        quickLinksFeedback.textContent = error instanceof Error
+          ? error.message
+          : 'The Quick Link could not be removed.';
+      }
+    }
+  }
+
+  function setTodoEditing(button, editing) {
+    const card = button.closest('.duck-feed-card-content');
+
+    if (!card) {
+      return;
+    }
+
+    const display = card.querySelector('[data-activity-display]');
+    const form = card.querySelector('[data-todo-edit-form]');
+    const editButton = card.querySelector('[data-edit-todo]');
+
+    if (!display || !form || !editButton) {
+      return;
+    }
+
+    display.hidden = editing;
+    form.hidden = !editing;
+    editButton.hidden = editing;
+
+    if (editing) {
+      const titleInput = form.querySelector('[name="title"]');
+
+      if (titleInput) {
+        titleInput.focus();
+        titleInput.select();
+      }
+    }
+  }
+
+  async function saveTodo(form) {
+    const activityId = form.dataset.activityId || '';
+    const data = new FormData(form);
+    const title = String(data.get('title') || '').trim();
+    const body = String(data.get('body') || '');
+    const submit = form.querySelector('button[type="submit"]');
+
+    if (!activityId || !project) {
+      return;
+    }
+
+    if (submit) {
+      submit.disabled = true;
+      submit.textContent = 'Saving...';
+    }
+
+    try {
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(project)}/todos/${
+          encodeURIComponent(activityId)
+        }`,
+        {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({title, body}),
+        }
+      );
+      let result = {};
+
+      try {
+        result = await response.json();
+      } catch (_error) {
+        result = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(result.detail || 'The Todo could not be saved.');
+      }
+
+      window.location.reload();
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : 'The Todo could not be saved.'
+      );
+
+      if (submit) {
+        submit.disabled = false;
+        submit.textContent = 'Save Todo';
+      }
+    }
+  }
+
+  async function toggleTodoCompletion(button) {
+    const activityId = button.dataset.activityId || '';
+    const completed = button.dataset.completed === 'true';
+
+    if (!activityId || !project) {
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = completed ? 'Reopening...' : 'Closing...';
+
+    try {
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(project)}/todos/${
+          encodeURIComponent(activityId)
+        }/completion`,
+        {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({completed: !completed}),
+        }
+      );
+      let result = {};
+
+      try {
+        result = await response.json();
+      } catch (_error) {
+        result = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(result.detail || 'The Todo could not be updated.');
+      }
+
+      window.location.reload();
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : 'The Todo could not be updated.'
+      );
+      button.disabled = false;
+      button.textContent = completed ? 'Reopen' : 'Close';
+    }
+  }
+
+  if (quickLinksEdit) {
+    quickLinksEdit.addEventListener('click', () => setQuickLinksEditing(true));
+  }
+
+  if (quickLinksDone) {
+    quickLinksDone.addEventListener('click', () => setQuickLinksEditing(false));
+  }
+
+  for (const form of quickLinkForms) {
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      saveQuickLink(form, form.dataset.quickLinkId || '');
+    });
+
+    const remove = form.querySelector('[data-delete-quick-link]');
+
+    if (remove) {
+      remove.addEventListener('click', () => deleteQuickLink(form));
+    }
+  }
+
+  if (quickLinkAdd) {
+    quickLinkAdd.addEventListener('submit', (event) => {
+      event.preventDefault();
+      saveQuickLink(quickLinkAdd);
+    });
+  }
+
+  for (const button of editTodoButtons) {
+    button.addEventListener('click', () => setTodoEditing(button, true));
+  }
+
+  for (const button of cancelTodoEditButtons) {
+    button.addEventListener('click', () => setTodoEditing(button, false));
+  }
+
+  for (const form of todoEditForms) {
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      saveTodo(form);
+    });
+  }
+
+  for (const button of toggleTodoButtons) {
+    button.addEventListener('click', () => toggleTodoCompletion(button));
+  }
+
   function setAboutEditing(editing) {
     if (!aboutForm || !aboutDisplay || !aboutEdit) {
       return;
@@ -1684,4 +2027,222 @@
       }
     });
   }
+})();
+
+/* ==========================================================
+   DUCK CLEAN TOOLBAR AND RESIZABLE COLUMNS
+   ========================================================== */
+
+(() => {
+  const layout = document.getElementById('duck-feed-layout');
+  const project = document.body.dataset.project || '';
+  const equalize = document.getElementById('duck-layout-equalize');
+
+  if (!layout) {
+    return;
+  }
+
+  const widthStorageKey = `duck.column.widths.${project}`;
+  const stateStorageKey = `duck.columns.${project}`;
+  const minimumWidth = 220;
+  const resizers = [];
+
+  function columns() {
+    return Array.from(
+      layout.querySelectorAll(':scope > [data-duck-column]')
+    );
+  }
+
+  function savedWidths() {
+    try {
+      const parsed = JSON.parse(
+        localStorage.getItem(widthStorageKey) || '{}'
+      );
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (_error) {
+      return {};
+    }
+  }
+
+  function persistWidths() {
+    const values = {};
+
+    for (const column of columns()) {
+      const width = column.style.getPropertyValue('--duck-column-size');
+      if (width) {
+        values[column.dataset.duckColumn] = width;
+      }
+    }
+
+    try {
+      localStorage.setItem(widthStorageKey, JSON.stringify(values));
+    } catch (_error) {
+      // Resizing still works for the current page load.
+    }
+  }
+
+  function applySavedWidths() {
+    const values = savedWidths();
+
+    for (const column of columns()) {
+      const width = values[column.dataset.duckColumn];
+      if (!width) {
+        continue;
+      }
+
+      column.style.setProperty('--duck-column-size', width);
+      column.classList.add('duck-column-resized');
+    }
+  }
+
+  function columnById(columnId) {
+    return columns().find(
+      (column) => column.dataset.duckColumn === columnId
+    );
+  }
+
+  function updateResizers() {
+    for (const resizer of resizers) {
+      const left = columnById(resizer.dataset.leftColumn || '');
+      const right = columnById(resizer.dataset.rightColumn || '');
+      const visible = Boolean(
+        left
+        && right
+        && left.dataset.columnState !== 'collapsed'
+        && right.dataset.columnState !== 'collapsed'
+      );
+      resizer.hidden = !visible;
+    }
+  }
+
+  function beginResize(event, resizer) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    const left = columnById(resizer.dataset.leftColumn || '');
+    const right = columnById(resizer.dataset.rightColumn || '');
+
+    if (
+      !left
+      || !right
+      || left.dataset.columnState === 'collapsed'
+      || right.dataset.columnState === 'collapsed'
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    const startX = event.clientX;
+    const leftStart = left.getBoundingClientRect().width;
+    const rightStart = right.getBoundingClientRect().width;
+    const total = leftStart + rightStart;
+    const maximumLeft = Math.max(minimumWidth, total - minimumWidth);
+
+    left.dataset.columnState = 'normal';
+    right.dataset.columnState = 'normal';
+    left.classList.add('duck-column-resized');
+    right.classList.add('duck-column-resized');
+    document.body.classList.add('duck-is-resizing-columns');
+    resizer.setPointerCapture(event.pointerId);
+
+    function move(moveEvent) {
+      const proposed = leftStart + moveEvent.clientX - startX;
+      const leftWidth = Math.min(
+        maximumLeft,
+        Math.max(minimumWidth, proposed)
+      );
+      const rightWidth = total - leftWidth;
+
+      left.style.setProperty('--duck-column-size', `${leftWidth}px`);
+      right.style.setProperty('--duck-column-size', `${rightWidth}px`);
+    }
+
+    function finish() {
+      resizer.removeEventListener('pointermove', move);
+      resizer.removeEventListener('pointerup', finish);
+      resizer.removeEventListener('pointercancel', finish);
+      document.body.classList.remove('duck-is-resizing-columns');
+      persistWidths();
+      updateResizers();
+    }
+
+    resizer.addEventListener('pointermove', move);
+    resizer.addEventListener('pointerup', finish);
+    resizer.addEventListener('pointercancel', finish);
+  }
+
+  function buildResizers() {
+    for (const oldResizer of layout.querySelectorAll(
+      ':scope > .duck-column-resizer'
+    )) {
+      oldResizer.remove();
+    }
+    resizers.length = 0;
+
+    const ordered = columns();
+
+    for (let index = 0; index < ordered.length - 1; index += 1) {
+      const left = ordered[index];
+      const right = ordered[index + 1];
+      const resizer = document.createElement('div');
+      resizer.className = 'duck-column-resizer';
+      resizer.dataset.leftColumn = left.dataset.duckColumn || '';
+      resizer.dataset.rightColumn = right.dataset.duckColumn || '';
+      resizer.setAttribute('role', 'separator');
+      resizer.setAttribute('aria-orientation', 'vertical');
+      resizer.setAttribute('aria-label', 'Resize adjacent columns');
+      resizer.title = 'Drag to resize columns';
+      resizer.addEventListener(
+        'pointerdown',
+        (event) => beginResize(event, resizer)
+      );
+      left.after(resizer);
+      resizers.push(resizer);
+    }
+
+    updateResizers();
+  }
+
+  function equalizeColumns() {
+    const ordered = columns();
+
+    for (const column of ordered) {
+      column.dataset.columnState = 'normal';
+      column.classList.remove('duck-column-resized');
+      column.style.removeProperty('--duck-column-size');
+    }
+
+    try {
+      localStorage.removeItem(widthStorageKey);
+      localStorage.setItem(
+        stateStorageKey,
+        JSON.stringify({
+          order: ordered.map((column) => column.dataset.duckColumn),
+          states: Object.fromEntries(
+            ordered.map((column) => [column.dataset.duckColumn, 'normal'])
+          ),
+        })
+      );
+    } catch (_error) {
+      // Equalizing still works for this page load.
+    }
+
+    updateResizers();
+  }
+
+  if (equalize) {
+    equalize.addEventListener('click', equalizeColumns);
+  }
+
+  const observer = new MutationObserver(updateResizers);
+  for (const column of columns()) {
+    observer.observe(column, {
+      attributes: true,
+      attributeFilter: ['data-column-state'],
+    });
+  }
+
+  applySavedWidths();
+  buildResizers();
 })();

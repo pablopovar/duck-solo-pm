@@ -306,6 +306,48 @@ def _tool_definitions() -> list[dict[str, object]]:
                 },
             },
         },
+        {
+            "type": "function",
+            "function": {
+                "name": "summarize_open_todos",
+                "description": (
+                    "Load the project's incomplete Todos so you can summarize "
+                    "the open work, priorities, and next actions."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 500,
+                            "default": 500,
+                        },
+                    },
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "summarize_notes",
+                "description": (
+                    "Load the project's Notes so you can summarize their "
+                    "themes, decisions, context, and unresolved questions."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 500,
+                            "default": 500,
+                        },
+                    },
+                },
+            },
+        },
     ]
 
 
@@ -448,6 +490,7 @@ def _search_files(
 
 
 def _execute_tool(
+    project_root: Path,
     project_files: ProjectFiles,
     name: str,
     arguments: dict[str, object],
@@ -459,6 +502,38 @@ def _execute_tool(
         return _read_file(project_files, arguments, accessed_files)
     if name == "search_project_files":
         return _search_files(project_files, arguments, accessed_files)
+    if name == "summarize_open_todos":
+        limit = _integer_argument(arguments, "limit", 500, 1, 500)
+        records = project_store.open_todos(project_root, limit=limit)
+        accessed_files.add(VIRTUAL_PROJECT_DATA_PATH)
+        return json.dumps(
+            {
+                "instruction": "Summarize these incomplete Todos for the user.",
+                "count": len(records),
+                "open_todos": records,
+            },
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        )
+    if name == "summarize_notes":
+        limit = _integer_argument(arguments, "limit", 500, 1, 500)
+        records = project_store.list_activity(
+            project_root,
+            limit=limit,
+            kind="note",
+        )
+        accessed_files.add(VIRTUAL_PROJECT_DATA_PATH)
+        return json.dumps(
+            {
+                "instruction": "Summarize these Notes for the user.",
+                "count": len(records),
+                "notes": records,
+            },
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        )
     return f"Unknown project tool: {name}"
 
 
@@ -572,6 +647,7 @@ def complete_project_chat(
                         else ""
                     )
                     result = _execute_tool(
+                        project_root,
                         project_files,
                         name,
                         _tool_arguments(tool_call),
