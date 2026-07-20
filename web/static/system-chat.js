@@ -1,5 +1,12 @@
 (() => {
   const model = document.getElementById('duck-system-chat-model');
+  const fontDecrease = document.getElementById(
+    'duck-system-chat-font-decrease'
+  );
+  const fontIncrease = document.getElementById(
+    'duck-system-chat-font-increase'
+  );
+  const fontLabel = document.getElementById('duck-system-chat-font-label');
   const focus = document.getElementById('duck-system-chat-focus');
   const clear = document.getElementById('duck-system-chat-clear');
   const messages = document.getElementById('duck-system-chat-messages');
@@ -10,6 +17,9 @@
 
   if (
     !model
+    || !fontDecrease
+    || !fontIncrease
+    || !fontLabel
     || !focus
     || !clear
     || !messages
@@ -22,6 +32,67 @@
   }
 
   const sidebarToggle = document.getElementById('sidebar-toggle');
+  const chat = document.querySelector('.duck-system-chat');
+  const fontScales = [0.6, 0.7, 0.85, 1, 1.15, 1.3, 1.45];
+  const fontScaleKey = 'duck.system-chat.font-scale';
+  let fontScaleIndex = fontScales.indexOf(1);
+
+  function setFontScale(index) {
+    fontScaleIndex = Math.max(
+      0,
+      Math.min(index, fontScales.length - 1)
+    );
+
+    const scale = fontScales[fontScaleIndex];
+
+    if (chat) {
+      chat.style.setProperty(
+        '--duck-system-chat-font-scale',
+        `${Math.round(scale * 100)}%`
+      );
+    }
+
+    fontLabel.textContent = `${Math.round(scale * 100)}%`;
+    fontDecrease.disabled = fontScaleIndex === 0;
+    fontIncrease.disabled = fontScaleIndex === fontScales.length - 1;
+    localStorage.setItem(fontScaleKey, String(scale));
+  }
+
+  function loadFontScale() {
+    const stored = Number(localStorage.getItem(fontScaleKey));
+
+    if (Number.isFinite(stored)) {
+      const exact = fontScales.indexOf(stored);
+
+      if (exact >= 0) {
+        fontScaleIndex = exact;
+      }
+    }
+
+    setFontScale(fontScaleIndex);
+  }
+
+  async function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    const temporary = document.createElement('textarea');
+    temporary.value = text;
+    temporary.setAttribute('readonly', '');
+    temporary.style.position = 'fixed';
+    temporary.style.opacity = '0';
+    document.body.append(temporary);
+    temporary.select();
+
+    const copied = document.execCommand('copy');
+    temporary.remove();
+
+    if (!copied) {
+      throw new Error('Copy failed');
+    }
+  }
 
   function syncFocusButton() {
     const focused = document.body.classList.contains('projects-collapsed');
@@ -47,12 +118,46 @@
   function messageElement(message) {
     const article = document.createElement('article');
     const role = message.role === 'assistant' ? 'assistant' : 'user';
+    const content = message.content || '';
     article.className = `duck-system-message duck-system-message-${role}`;
 
-    if (role === 'assistant' && message.html) {
-      article.innerHTML = message.html;
+    if (role === 'assistant') {
+      const actions = document.createElement('div');
+      const copy = document.createElement('button');
+      const rendered = document.createElement('div');
+
+      actions.className = 'duck-system-message-actions';
+      copy.className = 'duck-system-message-copy';
+      copy.type = 'button';
+      copy.textContent = 'Copy answer';
+      rendered.className = 'duck-system-message-content';
+
+      if (message.html) {
+        rendered.innerHTML = message.html;
+      } else {
+        rendered.textContent = content;
+      }
+
+      copy.addEventListener('click', async () => {
+        copy.disabled = true;
+
+        try {
+          await copyText(content);
+          copy.textContent = 'Copied';
+        } catch (_error) {
+          copy.textContent = 'Copy failed';
+        }
+
+        window.setTimeout(() => {
+          copy.textContent = 'Copy answer';
+          copy.disabled = false;
+        }, 1400);
+      });
+
+      actions.append(copy);
+      article.append(actions, rendered);
     } else {
-      article.textContent = message.content || '';
+      article.textContent = content;
     }
 
     return article;
@@ -205,6 +310,14 @@
 
   input.addEventListener('input', resizeInput);
 
+  fontDecrease.addEventListener('click', () => {
+    setFontScale(fontScaleIndex - 1);
+  });
+
+  fontIncrease.addEventListener('click', () => {
+    setFontScale(fontScaleIndex + 1);
+  });
+
   focus.addEventListener('click', () => {
     if (sidebarToggle) {
       sidebarToggle.click();
@@ -250,6 +363,7 @@
   });
 
   syncFocusButton();
+  loadFontScale();
   resizeInput();
   loadChat();
 })();

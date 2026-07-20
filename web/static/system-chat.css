@@ -7,6 +7,8 @@
 }
 
 .duck-system-chat {
+  --duck-system-chat-font-scale: 100%;
+
   width: 100%;
   height: 100%;
   margin: 0 auto;
@@ -17,6 +19,7 @@
   border-radius: 10px;
   background: #fff;
   box-shadow: 0 12px 32px rgb(33 43 54 / 8%);
+  font-size: var(--duck-system-chat-font-scale);
 }
 
 .duck-system-chat-header,
@@ -36,20 +39,51 @@
 .duck-system-chat-header h1 {
   margin: 0;
   color: #293642;
-  font-size: 22px;
+  font-size: 1.375em;
   line-height: 1.2;
 }
 
 .duck-system-chat-header p {
   margin: 2px 0 0;
   color: #667789;
-  font-size: 14px;
+  font-size: 0.875em;
 }
 
 .duck-system-chat-header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.duck-system-chat-font-controls {
+  display: inline-flex;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid #cbd2da;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.duck-system-chat-header .duck-system-chat-font-controls button {
+  min-width: 40px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 0;
+}
+
+.duck-system-chat-font-controls output {
+  min-width: 54px;
+  display: grid;
+  place-items: center;
+  padding: 0 7px;
+  border-right: 1px solid #dfe3e8;
+  border-left: 1px solid #dfe3e8;
+  color: #526270;
+  font-size: 0.75em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .duck-system-chat-header button,
@@ -76,7 +110,7 @@
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  font-size: 13px;
+  font-size: 0.8125em;
 }
 
 .duck-system-chat-toolbar select {
@@ -102,7 +136,7 @@
   margin: 40px auto;
   max-width: 650px;
   color: #7a8793;
-  font-size: 18px;
+  font-size: 1.125em;
   line-height: 1.6;
   text-align: center;
 }
@@ -142,16 +176,44 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  font-size: 17px;
+  font-size: 1.0625em;
   line-height: 1.65;
 }
 
-.duck-system-message-assistant > :first-child {
+.duck-system-message-content > :first-child {
   margin-top: 0;
 }
 
-.duck-system-message-assistant > :last-child {
+.duck-system-message-content > :last-child {
   margin-bottom: 0;
+}
+
+.duck-system-message-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.duck-system-message-copy {
+  padding: 4px 8px;
+  border: 1px solid #cbd2da;
+  border-radius: 6px;
+  background: #fff;
+  color: #526270;
+  font: inherit;
+  font-size: 0.75em;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.duck-system-message-copy:hover {
+  border-color: #8c99a5;
+  background: #f4f6f8;
+}
+
+.duck-system-message-copy:disabled {
+  cursor: default;
+  opacity: 0.72;
 }
 
 .duck-system-message-assistant p,
@@ -212,7 +274,7 @@
 
 #duck-system-chat-status {
   color: #687987;
-  font-size: 13px;
+  font-size: 0.8125em;
 }
 
 #duck-system-chat-status.is-error {
@@ -229,7 +291,7 @@
 
 .duck-system-chat button:disabled,
 .duck-system-chat select:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.6;
 }
 
