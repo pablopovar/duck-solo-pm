@@ -1,176 +1,195 @@
-# Duck
+# Duck SoloPM
 
-Duck is a local, filesystem-first dashboard for solo project management.
+**A local-first project workspace built for one person.**
 
-Projects remain ordinary folders on disk. Duck adds a lightweight management layer through a `.pocket/` directory inside each configured project. It does not require a project database or fixed absolute paths.
+Duck gives a solo operator one place to see a project's context, record what happened, keep the next work visible, reach its resources, and ask questions grounded in the project itself.
 
-## Current capabilities
+It is not a team platform reduced to a single-user plan. There are no roles to assign, teammates to invite, Gantt charts to maintain, or workflows to sell to anyone else.
 
-- Discover project folders beneath one configurable projects directory.
-- Initialize an existing folder as a Duck project.
-- Display a Markdown dashboard for each project.
-- Sort projects alphabetically, by recent activity, or by score.
-- Edit selected project-management Markdown files in the built-in editor.
-- Open a project folder in the desktop file manager.
-- Open a terminal in a project folder.
-- Open configured GitHub and local-repository locations.
-- Request an optional one-line status update when leaving a project.
-- Append submitted status updates to `.pocket/status.md` with a timestamp.
-- Display configurable system-wide periodic reminders while Duck is open.
-- Run the container under a configured host UID and GID to avoid root-owned project files.
+Duck starts with a simpler requirement: open a project and understand it quickly.
 
-## Project structure
+## Why Duck exists
 
-A configured project has this basic structure:
+Projects rarely live in one application. Their working reality is spread across folders, repositories, documents, notes, links, browser tabs, terminals, and conversations.
+
+Duck keeps the Local Folder as the project and adds a compact management layer around it:
+
+- a fast project overview;
+- direct access to folders, repositories, terminals, and important resources;
+- one chronological stream for Notes, Todos, Statuses, Links, and Files;
+- project-level and system-wide model chat grounded in stored project evidence;
+- local state that remains with the project instead of living in a remote service.
+
+## What Duck currently does
+
+### Project workspace
+
+Each configured project has three focusable columns:
+
+1. **Project** — About, Quick Links, pinned resources, and the top three open Todos.
+2. **Activity** — the project's chronological stream of Notes, Todos, Statuses, Links, and Files.
+3. **Chat** — a project assistant that can search and read the project's files.
+
+Columns can be collapsed, normalized, expanded, reordered, and grouped into collapsed stacks. Focusing one column gives it the available working space and collapses the others.
+
+The Activity feed supports:
+
+- collapsed, compact entries;
+- filtering by activity type;
+- titles for every item;
+- multiline Notes and Todos without the former 2,000-character limit;
+- completion state for Todos;
+- soft deletion of activity items;
+- three persistent interface densities: Spacious, Standard, and Compact;
+- a pop-up composer that stays out of the workspace until needed.
+
+### Files and resources
+
+Duck can:
+
+- upload a file into the project's `files/` directory;
+- create a Markdown file from text entered in the browser;
+- download a file through the project interface;
+- convert a Note into a file—the item ceases to be a Note;
+- pin Links and Files into the project's Pinned Resources block;
+- refuse unsafe paths and avoid silently overwriting an existing file.
+
+Duck's file model is intentionally direct: **the files in Duck are the files in the Local Folder.** It does not create a parallel document store.
+
+### Project context
+
+Project context includes:
+
+- an editable About profile: what the project is, why it exists, and its class;
+- configurable Status, Category, Priority, Class, and Type values;
+- Current State, Next Action, Unresolved Decisions, and Milestone Definition fields;
+- configurable project score and resource links;
+- optional leave-project and periodic reminders.
+
+Desktop links can open the project folder, a terminal at the project path, the local repository, and GitHub. These actions require Duck's desktop protocol handler on the computer running the browser.
+
+## Model chat
+
+Duck works with an OpenAI-compatible model API. It can use a local Ollama endpoint, the OpenAI API, or another compatible service.
+
+### Project chat
+
+Project chat operates inside one project. Duck builds a readable-file inventory and exposes three model tools:
+
+- `list_project_files`
+- `search_project_files`
+- `read_project_file`
+
+The model receives the inventory, chooses what to search or read, and answers from the returned evidence. Responses are instructed to cite project paths and distinguish stored evidence from inference.
+
+Duck reads UTF-8-compatible text and extracts text from PDFs. It excludes dependency trees and internal material such as `.git`, `.venv`, `node_modules`, Python caches, database files, backups, binary files, and symlinks.
+
+SQLite-backed About data, settings, Notes, Todos, Links, Files, and Activity are exposed to project chat through the virtual path:
 
 ```text
-example-project/
-├── .pocket/
-│   ├── config.md
-│   ├── dashboard.md
-│   ├── decisions.md
-│   ├── manifesto.md
-│   ├── status.md
-│   └── stream.md
-├── canvas.md
-└── inbox.md
-````
-
-Duck recognizes a configured project through:
-
-```text
-.pocket/config.md
+.duck/project-data.json
 ```
 
-The project folder remains portable. Duck derives its location from the configured projects root rather than requiring a separate application database entry.
+The current project-chat tools are read-only. They do not let the model modify project files.
 
-## Application structure
+### System-wide chat
+
+The main dashboard at `/` contains **Ask Duck**, a persistent chat operating across all configured projects.
+
+It can inspect:
+
+- project identities and About profiles;
+- project settings and qualifiers;
+- Notes, Todos, Statuses, Links, and File metadata;
+- pinned resources;
+- recent Activity;
+- open Todos;
+- matching Activity across projects.
+
+System-wide chat deliberately does **not** read arbitrary Local Folder file contents. Project file reading belongs to the chat inside that project.
+
+## Storage model
+
+Projects remain ordinary folders under one configured projects directory. Duck discovers immediate child folders and can initialize an existing folder as a Duck project.
+
+A representative configured project looks like this:
 
 ```text
-duck-solo-pm/
-├── app/
-├── docs/
-├── web/
-├── .env.dist
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-└── README.md
+projects/
+├── .duck/
+│   └── system.sqlite3
+└── example-project/
+    ├── .duck/
+    │   ├── project.sqlite3
+    │   ├── config.md
+    │   ├── dashboard.md
+    │   ├── project-settings.json
+    │   ├── session-values.json
+    │   └── ...
+    ├── files/
+    ├── inbox.md
+    ├── canvas.md
+    └── the rest of the project
 ```
+
+The per-project SQLite database is the canonical store for Activity, the About profile, project settings, and project chat history. System chat history and the project registry live in `PROJECTS_ROOT/.duck/system.sqlite3`.
+
+`.duck/` is the canonical Duck system directory. Projects that still contain only `.pocket/` remain readable but display a legacy warning and an explicit migration action. If both directories exist, Duck reports a conflict instead of guessing.
 
 ## Requirements
 
-* Docker
-* Docker Compose
-* A directory containing the projects Duck should manage
-* A modern web browser
+- Docker
+- Docker Compose
+- a directory containing the project folders Duck should see
+- a modern browser
+- optionally, an OpenAI-compatible model service
+- optionally, the desktop protocol handler for local folder and terminal actions
 
-The **Open folder**, **Open terminal**, and local-repository controls require the Duck desktop protocol handler on the computer running the browser.
+## Installation
 
-## Configuration
+Clone the repository:
 
-Create the local configuration from the distributable template:
+```bash
+git clone https://github.com/pablopovar/duck-solo-pm.git
+cd duck-solo-pm
+```
+
+Create the local environment file:
 
 ```bash
 cp .env.dist .env
 ```
 
-Edit `.env`:
+Edit `.env` with absolute host paths:
 
 ```dotenv
-POCKET_PROJECTS_PATH="/path/to/projects"
-POCKET_PROJECTS_HOST_PATH="/path/to/projects"
+POCKET_PROJECTS_PATH="/absolute/path/to/projects"
+POCKET_PROJECTS_HOST_PATH="/absolute/path/to/projects"
 POCKET_PORT="3200"
 
+DUCK_UID="1000"
+DUCK_GID="1000"
+
 DUCK_LEAVE_REMINDER_ENABLED="true"
-DUCK_LEAVE_REMINDER_MESSAGE="Add a one-line status update before leaving."
+DUCK_LEAVE_REMINDER_MESSAGE="Add a status update before leaving."
 
 DUCK_PERIODIC_REMINDER_ENABLED="true"
-DUCK_PERIODIC_REMINDER_MINUTES="30"
+DUCK_PERIODIC_REMINDER_MINUTES="60"
 DUCK_PERIODIC_REMINDER_MESSAGE="Time to update the status."
-
-DUCK_UID="1000"
-DUCK_GID="1000"
 ```
 
-### Project paths
+The `POCKET_*` environment names are retained for compatibility with the project's earlier name. New project state is stored under `.duck/`.
 
-`POCKET_PROJECTS_PATH` is the directory mounted into the Duck container.
-
-`POCKET_PROJECTS_HOST_PATH` is the corresponding host path used by desktop actions such as opening a folder or terminal.
-
-For a local installation, these normally contain the same path.
-
-### Port
-
-`POCKET_PORT` controls the host port used to access Duck.
-
-The default is:
-
-```text
-3200
-```
-
-### Container identity
-
-`DUCK_UID` and `DUCK_GID` define the user and group under which Duck runs inside the container.
-
-Set them to the UID and GID of the host user who owns the project folders. On many Linux systems, the first regular user is:
-
-```dotenv
-DUCK_UID="1000"
-DUCK_GID="1000"
-```
-
-This prevents Duck from creating root-owned files in bind-mounted projects.
-
-### Leave-project reminder
-
-The leave-project reminder is global. It is not configured separately for each project.
-
-When leaving a project, Duck can display a one-line status field. The update is optional. When submitted, Duck appends it to:
-
-```text
-.pocket/status.md
-```
-
-Example:
-
-```markdown
-- **07/14/2026 11:52 AM** — Finished the initial reminder implementation.
-```
-
-Pressing `Esc` closes the Duck reminder without submitting an update.
-
-Duck may also show the custom reminder when the pointer exits through the top of the page as an exit-intent signal.
-
-### Periodic reminder
-
-The periodic reminder is also global.
-
-It appears throughout Duck at the configured interval, regardless of which project is open. It runs only while Duck is open in the browser.
-
-The interval is expressed in whole minutes:
-
-```dotenv
-DUCK_PERIODIC_REMINDER_MINUTES="30"
-```
-
-For testing every minute:
-
-```dotenv
-DUCK_PERIODIC_REMINDER_MINUTES="1"
-```
-
-After changing `.env`, recreate the container:
+Set `DUCK_UID` and `DUCK_GID` to the host user that owns the project folders:
 
 ```bash
-docker compose up -d --force-recreate
+id -u
+id -g
 ```
 
-## Start
+This prevents the container from creating root-owned files in bind-mounted projects.
 
-From the Duck application directory:
+Build and start Duck:
 
 ```bash
 docker compose up -d --build
@@ -179,60 +198,115 @@ docker compose up -d --build
 Open:
 
 ```text
-http://127.0.0.1:3200
+http://127.0.0.1:3200/
 ```
 
-Use the port configured in `.env` when it differs from `3200`.
+Use the port configured by `POCKET_PORT` if it differs from `3200`.
 
-## Stop
+## Model configuration
+
+### Local Ollama
+
+Duck's default endpoint is Ollama's OpenAI-compatible API on the host:
+
+```dotenv
+DUCK_MODEL_BASE_URL="http://host.docker.internal:11434/v1"
+DUCK_MODEL_NAME=""
+DUCK_MODEL_API_KEY=""
+DUCK_MODEL_TIMEOUT_SECONDS="300"
+```
+
+Ollama must be reachable from the container, and the selected model must support reliable function/tool calling. Leaving `DUCK_MODEL_NAME` empty lets Duck choose from the models returned by the endpoint.
+
+### OpenAI API
+
+To use OpenAI directly:
+
+```dotenv
+DUCK_MODEL_BASE_URL="https://api.openai.com/v1"
+DUCK_MODEL_NAME="gpt-4.1-nano"
+DUCK_MODEL_API_KEY="your-api-key"
+DUCK_MODEL_TIMEOUT_SECONDS="300"
+```
+
+`gpt-4.1-nano` is a low-cost development choice with function calling. Keep the API key only in `.env`; never commit it.
+
+After changing model settings, recreate the container:
 
 ```bash
-docker compose down
+docker compose up -d --force-recreate
 ```
 
-## Rebuild after source changes
+Duck currently uses one model endpoint and API key at a time. The model selector lists the models returned by that endpoint.
+
+## Initializing a project
+
+1. Create or place a project folder directly under the configured projects directory.
+2. Open Duck.
+3. Select the folder from the Projects list.
+4. Choose to configure it.
+5. Submit the configuration form. Its fields are optional.
+
+Duck initializes the existing folder; it does not currently create new project folders or register arbitrary folders outside the configured projects root.
+
+## Common operations
+
+Start or rebuild after source changes:
 
 ```bash
 docker compose up -d --build --force-recreate
 ```
 
-## Verify the container identity
+Stop Duck:
+
+```bash
+docker compose down
+```
+
+Inspect the running service:
+
+```bash
+docker compose ps
+```
+
+Verify the container identity:
 
 ```bash
 docker compose exec web id
 ```
 
-With the standard local configuration, the result should include:
+## Current boundaries
 
-```text
-uid=1000 gid=1000
-```
+Duck is under active development. The current implementation is intentionally narrow:
 
-## Project portability
+- single-user, with no application authentication or guest system;
+- one configured projects root mounted into Docker;
+- projects discovered as immediate child folders of that root;
+- no arbitrary external project-folder registration yet;
+- no project-folder creation from the Duck interface yet;
+- one model provider endpoint at a time;
+- system chat reads structured Duck data and Activity, not arbitrary files across every project;
+- deleting a File activity record does not delete the physical file from the Local Folder;
+- Activity deletion is soft deletion, but recovery is not yet exposed in the interface.
 
-Duck does not require projects to remain at fixed absolute paths.
+These are current implementation boundaries, not claims about Duck's eventual scope.
 
-* Move or rename a project within the configured projects directory without editing the project.
-* Move the projects directory by changing the two global project paths in `.env`.
-* Move the Duck application independently from the projects it manages.
-* Keep project-local references relative to the project folder.
+## Technology
 
-## Local configuration and generated files
+- Python 3.13
+- FastAPI and Uvicorn
+- SQLite
+- Jinja templates
+- vanilla JavaScript and CSS
+- Milkdown Crepe for the Markdown editor
+- Docker Compose
 
-The repository excludes local and generated material including:
+## Name
 
-* `.env`
-* backups
-* logs
-* Python caches
-* temporary patch scripts
-* generated editor assets
-* local dependency directories
-
-`.env.dist` is tracked as the public configuration template.
+The earlier working name was **Door to Pocket**. The decided name is **Duck SoloPM**—from *“Fuck, I don't have a name for this.”*
 
 ## License
 
-Duck is released under the GNU General Public License, version 3.
+Duck SoloPM is released under the GNU General Public License, version 3.
 
 See [LICENSE](LICENSE).
